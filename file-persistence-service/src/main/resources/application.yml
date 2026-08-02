@@ -1,0 +1,43 @@
+# =====================================================
+#  FILE PERSISTENCE SERVICE (S3) - Configuration
+#  Port: 8083
+# =====================================================
+
+server:
+  port: 8083
+
+spring:
+  application:
+    name: file-persistence-service
+
+  # ---- PostgreSQL Database Connection ----
+  # These match the docker-compose.yml settings
+  datasource:
+    url: jdbc:postgresql://localhost:5433/file_pipeline_db
+    username: pipeline_user
+    password: pipeline_pass123
+    driver-class-name: org.postgresql.Driver
+
+  # ---- JPA / Hibernate ----
+  jpa:
+    hibernate:
+      ddl-auto: update          # Auto-creates tables on first run
+    show-sql: true              # Shows SQL queries in logs (helpful for demo)
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# ---- Dynatrace Configuration ----
+dynatrace:
+  tenant:
+    url: https://jpf24109.live.dynatrace.com
+  api:
+    token: "dt0c01.XXXXX.YYYYYY" # Replace with real token when running locally
+
+# ---- Actuator ----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

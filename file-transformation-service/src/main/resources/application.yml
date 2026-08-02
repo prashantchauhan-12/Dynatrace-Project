@@ -1,0 +1,30 @@
+# =====================================================
+#  FILE TRANSFORMATION SERVICE (S2) - Configuration
+#  Port: 8082
+# =====================================================
+
+server:
+  port: 8082
+
+spring:
+  application:
+    name: file-transformation-service
+
+# ---- Dynatrace Configuration ----
+dynatrace:
+  tenant:
+    url: https://jpf24109.live.dynatrace.com
+  api:
+    token: "dt0c01.XXXXX.YYYYYY" # Replace with real token when running locally
+
+# ---- Service 3 (Persistence) URL ----
+service:
+  persistence:
+    url: http://localhost:8083/api/persist
+
+# ---- Actuator ----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

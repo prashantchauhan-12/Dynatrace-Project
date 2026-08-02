@@ -1,0 +1,12 @@
+[TITLE]
+Employee Onboarding Checklist
+
+[LOGO]
+https://company.com/assets/logo.png
+
+[CONTENT]
+Welcome to the team! Please complete the following steps:
+1. Submit ID verification documents
+2. Complete security training module
+3. Set up development environment
+4. Review company policies handbook

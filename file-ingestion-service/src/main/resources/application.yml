@@ -1,0 +1,35 @@
+# =====================================================
+#  FILE INGESTION SERVICE (S1) - Configuration
+#  Port: 8081
+# =====================================================
+
+server:
+  port: 8081
+
+spring:
+  application:
+    name: file-ingestion-service
+  servlet:
+    multipart:
+      max-file-size: 10MB        # Max file size allowed
+      max-request-size: 10MB
+
+# ---- Dynatrace Configuration ----
+# Replace these with your actual Dynatrace tenant details
+dynatrace:
+  tenant:
+    url: https://jpf24109.live.dynatrace.com
+  api:
+    token: "dt0c01.XXXXX.YYYYYY" # Replace with real token when running locallyW5XJHKISAFIASECXBMBH65JXUOWNWM6M
+
+# ---- Service 2 (Transformation) URL ----
+service:
+  transformation:
+    url: http://localhost:8082/api/transform
+
+# ---- Actuator ----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

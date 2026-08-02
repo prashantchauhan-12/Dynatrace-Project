@@ -1,0 +1,30 @@
+# Docker Compose for Dynatrace File Pipeline
+# Starts PostgreSQL database for Service 3 (Persistence)
+#
+# Usage:
+#   docker-compose up -d        → Start PostgreSQL
+#   docker-compose down         → Stop PostgreSQL
+#   docker-compose down -v      → Stop + delete data
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pipeline-postgres
+    environment:
+      POSTGRES_DB: file_pipeline_db
+      POSTGRES_USER: pipeline_user
+      POSTGRES_PASSWORD: pipeline_pass123
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pipeline_user -d file_pipeline_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
