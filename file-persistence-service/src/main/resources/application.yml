@@ -9,6 +9,8 @@ server:
 spring:
   application:
     name: file-persistence-service
+  config:
+    import: optional:file:../.env[.properties]
 
   # ---- PostgreSQL Database Connection ----
   # These match the docker-compose.yml settings
@@ -33,7 +35,7 @@ dynatrace:
   tenant:
     url: https://jpf24109.live.dynatrace.com
   api:
-    token: "dt0c01.XXXXX.YYYYYY" # Replace with real token when running locally
+    token: ${DYNATRACE_API_TOKEN}
 
 # ---- Actuator ----
 management:

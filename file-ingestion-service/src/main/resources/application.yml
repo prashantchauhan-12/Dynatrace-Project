@@ -9,6 +9,8 @@ server:
 spring:
   application:
     name: file-ingestion-service
+  config:
+    import: optional:file:../.env[.properties]
   servlet:
     multipart:
       max-file-size: 10MB        # Max file size allowed
@@ -20,7 +22,7 @@ dynatrace:
   tenant:
     url: https://jpf24109.live.dynatrace.com
   api:
-    token: "dt0c01.XXXXX.YYYYYY" # Replace with real token when running locallyW5XJHKISAFIASECXBMBH65JXUOWNWM6M
+    token: ${DYNATRACE_API_TOKEN}
 
 # ---- Service 2 (Transformation) URL ----
 service:
