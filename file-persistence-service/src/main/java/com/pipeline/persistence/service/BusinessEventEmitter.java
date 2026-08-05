@@ -65,6 +65,11 @@ public class BusinessEventEmitter {
 
     private void sendToDynatrace(Map<String, Object> event) {
         try {
+            if (apiToken == null || apiToken.isBlank() || apiToken.contains("XXXXX")) {
+                log.error("[BIZ_EVENT_ERROR] ❌ Dynatrace API token is NOT configured! Token value: '{}'. Events will NOT be sent.", apiToken);
+                return;
+            }
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Api-Token " + apiToken);
@@ -72,11 +77,12 @@ public class BusinessEventEmitter {
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(event, headers);
             String url = dynatraceTenantUrl + BIZ_EVENTS_PATH;
 
-            restTemplate.postForEntity(url, request, String.class);
-            log.info("[BIZ_EVENT] S3 event sent to Dynatrace | type={}", event.get("type"));
+            log.info("[BIZ_EVENT] Sending S3 event to Dynatrace | url={} | token_length={}", url, apiToken.length());
+            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+            log.info("[BIZ_EVENT] ✅ S3 event sent to Dynatrace | status={} | type={}", response.getStatusCode(), event.get("type"));
 
         } catch (Exception e) {
-            log.warn("[BIZ_EVENT_ERROR] Failed to send S3 event to Dynatrace: {}", e.getMessage());
+            log.error("[BIZ_EVENT_ERROR] ❌ Failed to send S3 event to Dynatrace: {}", e.getMessage());
         }
     }
 }

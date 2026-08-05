@@ -94,6 +94,11 @@ public class BusinessEventEmitter {
      */
     private void sendToDynatrace(Map<String, Object> event) {
         try {
+            if (apiToken == null || apiToken.isBlank() || apiToken.contains("XXXXX")) {
+                log.error("[BIZ_EVENT_ERROR] ❌ Dynatrace API token is NOT configured! Token value: '{}'. Events will NOT be sent.", apiToken);
+                return;
+            }
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Api-Token " + apiToken);
@@ -102,15 +107,16 @@ public class BusinessEventEmitter {
 
             String url = dynatraceTenantUrl + BIZ_EVENTS_PATH;
 
+            log.info("[BIZ_EVENT] Sending S1 event to Dynatrace | url={} | token_length={}", url, apiToken.length());
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
-            log.info("[BIZ_EVENT] S1 event sent to Dynatrace. Status: {}. file_id={}, status={}",
-                    response.getStatusCode(), event.get("data"), event.get("type"));
+            log.info("[BIZ_EVENT] ✅ S1 event sent to Dynatrace | status={} | type={}",
+                    response.getStatusCode(), event.get("type"));
 
         } catch (Exception e) {
             // Log the error but DON'T throw — pipeline must continue even if Dynatrace is down
-            log.warn("[BIZ_EVENT_ERROR] Failed to send S1 event to Dynatrace: {}. " +
-                     "This does NOT affect file processing.", e.getMessage());
+            log.error("[BIZ_EVENT_ERROR] ❌ Failed to send S1 event to Dynatrace: {}",
+                     e.getMessage());
         }
     }
 }
