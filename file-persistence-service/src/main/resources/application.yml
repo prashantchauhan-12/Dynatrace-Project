@@ -10,7 +10,7 @@ spring:
   application:
     name: file-persistence-service
   config:
-    import: optional:file:../.env[.properties]
+    import: optional:file:../.env.properties
 
   # ---- PostgreSQL Database Connection ----
   # These match the docker-compose.yml settings

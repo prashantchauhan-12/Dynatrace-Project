@@ -10,7 +10,7 @@ spring:
   application:
     name: file-ingestion-service
   config:
-    import: optional:file:../.env[.properties]
+    import: optional:file:../.env.properties
   servlet:
     multipart:
       max-file-size: 10MB        # Max file size allowed

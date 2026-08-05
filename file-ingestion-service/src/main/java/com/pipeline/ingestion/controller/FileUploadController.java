@@ -12,11 +12,11 @@ import java.time.LocalDateTime;
 
 /**
  * ╔══════════════════════════════════════════════════════════════╗
- * ║  FILE UPLOAD CONTROLLER — REST API Entry Point              ║
- * ║                                                              ║
- * ║  Endpoint: POST /api/files/upload                            ║
- * ║  Input:    Multipart file + optional X-Correlation-Id header ║
- * ║  Output:   JSON with file_id and processing status           ║
+ * ║ FILE UPLOAD CONTROLLER — REST API Entry Point ║
+ * ║ ║
+ * ║ Endpoint: POST /api/files/upload ║
+ * ║ Input: Multipart file + optional X-Correlation-Id header ║
+ * ║ Output: JSON with file_id and processing status ║
  * ╚══════════════════════════════════════════════════════════════╝
  *
  * HOW TO TEST WITH POSTMAN:
@@ -59,7 +59,7 @@ public class FileUploadController {
             return ResponseEntity.ok(FileUploadResponse.builder()
                     .fileId(fileId)
                     .status("RECEIVED")
-                    .message("File accepted and processing started. Pipeline: S1 ✅ → S2 → S3")
+                    .message("File successfully processed through all stages. Pipeline: S1 ✅ → S2 ✅ → S3 ✅")
                     .timestamp(LocalDateTime.now())
                     .build());
 

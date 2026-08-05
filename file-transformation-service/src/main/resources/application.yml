@@ -10,7 +10,7 @@ spring:
   application:
     name: file-transformation-service
   config:
-    import: optional:file:../.env[.properties]
+    import: optional:file:../.env.properties
 
 # ---- Dynatrace Configuration ----
 dynatrace:
