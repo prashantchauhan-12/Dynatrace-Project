@@ -21,7 +21,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pipeline_user -d file_pipeline_db"]
+      test: [ "CMD-SHELL", "pg_isready -U pipeline_user -d file_pipeline_db" ]
       interval: 10s
       timeout: 5s
       retries: 5

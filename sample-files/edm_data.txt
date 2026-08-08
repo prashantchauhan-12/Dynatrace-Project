@@ -1,0 +1,23 @@
+[TITLE]
+Enterprise Data Management - Master Data Sync Report
+
+[LOGO]
+https://company.com/assets/edm-platform-logo.png
+
+[CONTENT]
+EDM Master Data Synchronization Report for August 2026.
+Source System: SAP S/4HANA | Target System: Snowflake DW
+Total Entities Synced: 14,832 records across 6 domains.
+
+Domain breakdown:
+- Customer Master: 4,221 records (100% sync)
+- Product Catalog: 3,105 records (99.8% sync)
+- Vendor Master: 2,450 records (100% sync)
+- Chart of Accounts: 1,892 records (100% sync)
+- Cost Centers: 1,678 records (99.9% sync)
+- Profit Centers: 1,486 records (100% sync)
+
+Data Quality Score: 99.7%
+
+[FOOTER]
+Confidential - EDM Team Internal Report | Generated on 2026-08-08 | Page 1 of 1

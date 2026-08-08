@@ -17,6 +17,7 @@ public class TransformedDocument {
 
     private String fileId;          // Correlation ID — same across all stages
     private String fileName;
+    private String fileType;        // FX, EDM, ACCOUNTS, or GENERIC
     private String title;           // Extracted from [TITLE] section
     private String logoUrl;         // Extracted from [LOGO] section
     private String content;         // Extracted from [CONTENT] section

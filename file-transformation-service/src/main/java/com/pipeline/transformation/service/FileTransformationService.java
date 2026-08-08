@@ -62,7 +62,8 @@ public class FileTransformationService {
     public void transformFile(TransformationRequest request) {
 
         String fileId = request.getFileId();
-        log.info("[S2_TRANSFORMATION] ▶ Processing started | file_id={}", fileId);
+        String fileType = request.getFileType() != null ? request.getFileType() : "GENERIC";
+        log.info("[S2_TRANSFORMATION] ▶ Processing started | file_id={} | file_type={}", fileId, fileType);
 
         try {
             String rawContent = request.getFileContent();
@@ -96,6 +97,7 @@ public class FileTransformationService {
             TransformedDocument document = TransformedDocument.builder()
                     .fileId(fileId)
                     .fileName(request.getFileName())
+                    .fileType(fileType)
                     .title(title)
                     .logoUrl(logoUrl != null ? logoUrl : "N/A")
                     .content(content)
@@ -103,7 +105,7 @@ public class FileTransformationService {
                     .build();
 
             // ─── Emit SUCCESS Business Event ───
-            businessEventEmitter.emitTransformationEvent(fileId, "SUCCESS", null);
+            businessEventEmitter.emitTransformationEvent(fileId, "SUCCESS", null, fileType);
 
             // ─── Forward to Service 3 (Persistence) ───
             forwardToPersistenceService(fileId, document);
@@ -112,7 +114,7 @@ public class FileTransformationService {
             log.error("[S2_ERROR] file_id={} | error={}", fileId, e.getMessage());
 
             // Emit FAILURE Business Event
-            businessEventEmitter.emitTransformationEvent(fileId, "FAILED", e.getMessage());
+            businessEventEmitter.emitTransformationEvent(fileId, "FAILED", e.getMessage(), fileType);
 
             // Re-throw so Dynatrace PurePath marks this span as failed
             throw e;
@@ -121,7 +123,7 @@ public class FileTransformationService {
             log.error("[S2_ERROR] file_id={} | unexpected_error={}", fileId, e.getMessage(), e);
 
             businessEventEmitter.emitTransformationEvent(
-                    fileId, "FAILED", "UNEXPECTED: " + e.getMessage());
+                    fileId, "FAILED", "UNEXPECTED: " + e.getMessage(), fileType);
             throw e;
         }
     }
@@ -177,6 +179,7 @@ public class FileTransformationService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Correlation-Id", fileId);
+        headers.set("X-File-Type", document.getFileType() != null ? document.getFileType() : "GENERIC");
 
         HttpEntity<TransformedDocument> request = new HttpEntity<>(document, headers);
 

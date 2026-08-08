@@ -60,9 +60,10 @@ public class FileIngestionService {
      *
      * @param file          The uploaded file from Postman
      * @param correlationId Optional correlation ID from X-Correlation-Id header
+     * @param fileType      File type: FX, EDM, ACCOUNTS, or GENERIC
      * @return The generated file_id
      */
-    public String processFile(MultipartFile file, String correlationId) throws IOException {
+    public String processFile(MultipartFile file, String correlationId, String fileType) throws IOException {
 
         // Step 1: Generate file_id (correlation ID)
         String fileId = (correlationId != null && !correlationId.isBlank())
@@ -73,8 +74,13 @@ public class FileIngestionService {
         long fileSize = file.getSize();
         String extension = extractExtension(fileName);
 
-        log.info("[S1_INGESTION] ▶ Processing started | file_id={} | name={} | size={} bytes | ext={}",
-                fileId, fileName, fileSize, extension);
+        // Normalize fileType to uppercase
+        String normalizedFileType = (fileType != null && !fileType.isBlank())
+                ? fileType.toUpperCase()
+                : "GENERIC";
+
+        log.info("[S1_INGESTION] ▶ Processing started | file_id={} | name={} | size={} bytes | ext={} | file_type={}",
+                fileId, fileName, fileSize, extension, normalizedFileType);
 
         // Step 2: Validate file FORMAT
         if (!ALLOWED_EXTENSIONS.contains(extension.toLowerCase())) {
@@ -83,7 +89,7 @@ public class FileIngestionService {
 
             // Emit FAILURE event to Dynatrace
             businessEventEmitter.emitIngestionEvent(
-                    fileId, "FAILED", "INVALID_FILE_FORMAT", fileSize, extension);
+                    fileId, "FAILED", "INVALID_FILE_FORMAT", fileSize, extension, normalizedFileType);
 
             throw new InvalidFileFormatException(
                     "File format '." + extension + "' is not supported. Allowed formats: " + ALLOWED_EXTENSIONS);
@@ -96,7 +102,7 @@ public class FileIngestionService {
 
             // Emit FAILURE event to Dynatrace
             businessEventEmitter.emitIngestionEvent(
-                    fileId, "FAILED", "PAYLOAD_TOO_LARGE", fileSize, extension);
+                    fileId, "FAILED", "PAYLOAD_TOO_LARGE", fileSize, extension, normalizedFileType);
 
             throw new FileTooLargeException(
                     "File size (" + fileSize + " bytes) exceeds maximum allowed size (" + MAX_FILE_SIZE + " bytes)");
@@ -104,12 +110,12 @@ public class FileIngestionService {
 
         // Step 4: Emit SUCCESS event to Dynatrace
         businessEventEmitter.emitIngestionEvent(
-                fileId, "SUCCESS", null, fileSize, extension);
+                fileId, "SUCCESS", null, fileSize, extension, normalizedFileType);
 
         log.info("[S1_INGESTION] ✅ Validation passed | file_id={}", fileId);
 
         // Step 5: Forward to Service 2 (Transformation)
-        forwardToTransformationService(fileId, file, fileName, fileSize, extension);
+        forwardToTransformationService(fileId, file, fileName, fileSize, extension, normalizedFileType);
 
         return fileId;
     }
@@ -120,8 +126,8 @@ public class FileIngestionService {
      */
     private void forwardToTransformationService(String fileId, MultipartFile file,
                                                  String fileName, long fileSize,
-                                                 String extension) throws IOException {
-        log.info("[S1_INGESTION] 📤 Forwarding to S2 (Transformation) | file_id={}", fileId);
+                                                 String extension, String fileType) throws IOException {
+        log.info("[S1_INGESTION] 📤 Forwarding to S2 (Transformation) | file_id={} | file_type={}", fileId, fileType);
 
         // Read file content as string
         String fileContent = new String(file.getBytes(), StandardCharsets.UTF_8);
@@ -132,13 +138,15 @@ public class FileIngestionService {
                 .fileName(fileName)
                 .fileSize(fileSize)
                 .fileExtension(extension)
+                .fileType(fileType)
                 .fileContent(fileContent)
                 .build();
 
         // Send HTTP POST to Service 2
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("X-Correlation-Id", fileId);  // Propagate correlation ID in header
+        headers.set("X-Correlation-Id", fileId);    // Propagate correlation ID in header
+        headers.set("X-File-Type", fileType);        // Propagate file type in header
 
         HttpEntity<IngestionPayload> request = new HttpEntity<>(payload, headers);
 

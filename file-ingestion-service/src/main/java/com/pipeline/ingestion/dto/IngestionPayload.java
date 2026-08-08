@@ -19,5 +19,6 @@ public class IngestionPayload {
     private String fileName;        // Original file name
     private long   fileSize;        // File size in bytes
     private String fileExtension;   // e.g., "txt", "csv"
+    private String fileType;        // FX, EDM, ACCOUNTS, or GENERIC
     private String fileContent;     // Raw text content of the file
 }

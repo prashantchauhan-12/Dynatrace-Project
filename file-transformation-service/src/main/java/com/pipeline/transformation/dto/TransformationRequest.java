@@ -19,5 +19,6 @@ public class TransformationRequest {
     private String fileName;
     private long   fileSize;
     private String fileExtension;
+    private String fileType;        // FX, EDM, ACCOUNTS, or GENERIC
     private String fileContent;     // Raw text content to parse
 }

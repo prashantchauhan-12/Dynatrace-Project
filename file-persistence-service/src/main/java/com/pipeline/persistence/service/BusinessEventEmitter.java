@@ -13,6 +13,21 @@ import java.util.*;
 /**
  * Business Event Emitter for S3 (Database Persistence).
  * Sends events to Dynatrace when DB save succeeds or fails.
+ *
+ * EVENT STRUCTURE (10 parameters total):
+ * TOP-LEVEL (2 — visible on honeycomb tile):
+ *   1. file_type  — FX / EDM / ACCOUNTS / GENERIC
+ *   2. status     — SUCCESS / FAILED
+ *
+ * INSIDE data (8 — visible on click/drilldown):
+ *   1. file_id        — Correlation ID
+ *   2. stage          — S3_DB_PERSISTENCE
+ *   3. stage_name     — Database Storage
+ *   4. error_type     — Error classification
+ *   5. error_detail   — Detailed error message
+ *   6. file_size      — (not applicable for S3, set to 0)
+ *   7. file_extension — (not applicable for S3, set to N/A)
+ *   8. timestamp      — ISO timestamp
  */
 @Service
 public class BusinessEventEmitter {
@@ -39,8 +54,9 @@ public class BusinessEventEmitter {
      * @param fileId      Correlation ID
      * @param status      "SUCCESS" or "FAILED"
      * @param errorDetail Error description if failed, null if success
+     * @param fileType    File type: FX, EDM, ACCOUNTS, or GENERIC
      */
-    public void emitPersistenceEvent(String fileId, String status, String errorDetail) {
+    public void emitPersistenceEvent(String fileId, String status, String errorDetail, String fileType) {
 
         Map<String, Object> event = new LinkedHashMap<>();
 
@@ -50,13 +66,19 @@ public class BusinessEventEmitter {
         event.put("source", "file-persistence-service");
         event.put("type", "com.pipeline.file.db_persistence");
 
-        // Business data
+        // --- TOP-LEVEL SUMMARY (2 fields — visible on honeycomb tile) ---
+        event.put("file_type", fileType != null ? fileType : "GENERIC");
+        event.put("status", status);
+
+        // --- DETAIL DATA (8 fields — visible on click/drilldown) ---
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("file_id", fileId);
         data.put("stage", "S3_DB_PERSISTENCE");
         data.put("stage_name", "Database Storage");
-        data.put("status", status);
+        data.put("error_type", errorDetail != null ? "DB_ERROR" : "NONE");
         data.put("error_detail", errorDetail != null ? errorDetail : "NONE");
+        data.put("file_size", 0);
+        data.put("file_extension", "N/A");
         data.put("timestamp", Instant.now().toString());
         event.put("data", data);
 
@@ -65,11 +87,6 @@ public class BusinessEventEmitter {
 
     private void sendToDynatrace(Map<String, Object> event) {
         try {
-            if (apiToken == null || apiToken.isBlank() || apiToken.contains("XXXXX")) {
-                log.error("[BIZ_EVENT_ERROR] ❌ Dynatrace API token is NOT configured! Token value: '{}'. Events will NOT be sent.", apiToken);
-                return;
-            }
-
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Api-Token " + apiToken);
@@ -77,12 +94,12 @@ public class BusinessEventEmitter {
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(event, headers);
             String url = dynatraceTenantUrl + BIZ_EVENTS_PATH;
 
-            log.info("[BIZ_EVENT] Sending S3 event to Dynatrace | url={} | token_length={}", url, apiToken.length());
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-            log.info("[BIZ_EVENT] ✅ S3 event sent to Dynatrace | status={} | type={}", response.getStatusCode(), event.get("type"));
+            log.info("[BIZ_EVENT] ✅ S3 event sent to Dynatrace | status={} | file_type={} | pipeline_status={}",
+                    response.getStatusCode(), event.get("file_type"), event.get("status"));
 
         } catch (Exception e) {
-            log.error("[BIZ_EVENT_ERROR] ❌ Failed to send S3 event to Dynatrace: {}", e.getMessage());
+            log.warn("[BIZ_EVENT_ERROR] Failed to send S3 event to Dynatrace: {}", e.getMessage());
         }
     }
 }

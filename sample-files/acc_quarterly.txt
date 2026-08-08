@@ -1,0 +1,26 @@
+[TITLE]
+Accounts Receivable Aging Report - Q3 2026
+
+[LOGO]
+https://company.com/assets/finance-logo.png
+
+[CONTENT]
+Accounts Receivable Summary for Q3 2026.
+Total Outstanding: $8.42M across 312 accounts.
+Collection Rate: 91.4%
+
+Aging Buckets:
+- Current (0-30 days): $3.21M (38.1%)
+- 31-60 days: $2.15M (25.5%)
+- 61-90 days: $1.84M (21.9%)
+- 90+ days (Overdue): $1.22M (14.5%)
+
+Top 5 Delinquent Accounts:
+- ACC-1042: $245,000 (142 days overdue)
+- ACC-0891: $198,000 (127 days overdue)
+- ACC-1105: $167,000 (98 days overdue)
+- ACC-0734: $145,000 (95 days overdue)
+- ACC-0923: $112,000 (91 days overdue)
+
+[FOOTER]
+Confidential - Finance Department Internal Report | Generated on 2026-08-08 | Page 1 of 1

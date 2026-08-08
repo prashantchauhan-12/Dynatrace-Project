@@ -47,14 +47,15 @@ public class FileUploadController {
     @PostMapping("/upload")
     public ResponseEntity<FileUploadResponse> uploadFile(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file_type", defaultValue = "GENERIC") String fileType,
             @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId) {
 
-        log.info("[S1_CONTROLLER] ▶ Received file upload request | name={} | size={} | correlationId={}",
-                file.getOriginalFilename(), file.getSize(), correlationId);
+        log.info("[S1_CONTROLLER] ▶ Received file upload request | name={} | size={} | correlationId={} | file_type={}",
+                file.getOriginalFilename(), file.getSize(), correlationId, fileType);
 
         try {
             // Delegate to service layer for validation + processing
-            String fileId = fileIngestionService.processFile(file, correlationId);
+            String fileId = fileIngestionService.processFile(file, correlationId, fileType);
 
             return ResponseEntity.ok(FileUploadResponse.builder()
                     .fileId(fileId)

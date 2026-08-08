@@ -21,13 +21,21 @@ import java.util.*;
  * ║  Docs: https://docs.dynatrace.com/docs/shortlink/ba-api    ║
  * ╚══════════════════════════════════════════════════════════════╝
  *
- * HOW IT WORKS:
- * 1. Each Business Event follows the CloudEvents specification
- * 2. The event contains:
- *    - specversion, id, source, type (required CloudEvents fields)
- *    - data (your custom business payload)
- * 3. Dynatrace ingests these and makes them queryable via DQL:
- *    fetch bizevents | filter type == "com.pipeline.file.ingestion"
+ * EVENT STRUCTURE (10 parameters total):
+ * ───────────────────────────────────────
+ * TOP-LEVEL (2 — visible on honeycomb tile):
+ *   1. file_type  — FX / EDM / ACCOUNTS / GENERIC
+ *   2. status     — SUCCESS / FAILED
+ *
+ * INSIDE data (8 — visible on click/drilldown):
+ *   1. file_id        — Correlation ID
+ *   2. stage          — S1_INGESTION
+ *   3. stage_name     — File Ingestion
+ *   4. error_type     — Error classification
+ *   5. error_detail   — Detailed error message
+ *   6. file_size      — Size in bytes
+ *   7. file_extension — txt, csv, etc.
+ *   8. timestamp      — ISO timestamp
  */
 @Service
 public class BusinessEventEmitter {
@@ -57,9 +65,10 @@ public class BusinessEventEmitter {
      * @param errorType     Error type if failed (e.g., "INVALID_FILE_FORMAT"), null if success
      * @param fileSize      Size of the uploaded file in bytes
      * @param fileExtension File extension (e.g., "txt", "pdf")
+     * @param fileType      File type: FX, EDM, ACCOUNTS, or GENERIC
      */
     public void emitIngestionEvent(String fileId, String status, String errorType,
-                                    long fileSize, String fileExtension) {
+                                    long fileSize, String fileExtension, String fileType) {
 
         // Build the CloudEvents-compliant event
         Map<String, Object> event = new LinkedHashMap<>();
@@ -67,16 +76,20 @@ public class BusinessEventEmitter {
         // --- Required CloudEvents fields ---
         event.put("specversion", "1.0");
         event.put("id", UUID.randomUUID().toString());
-        event.put("source", "file-ingestion-service");                 // Which microservice sent this
-        event.put("type", "com.pipeline.file.ingestion");              // Event type identifier
+        event.put("source", "file-ingestion-service");
+        event.put("type", "com.pipeline.file.ingestion");
 
-        // --- Your custom business data ---
+        // --- TOP-LEVEL SUMMARY (2 fields — visible on honeycomb tile) ---
+        event.put("file_type", fileType != null ? fileType : "GENERIC");
+        event.put("status", status);
+
+        // --- DETAIL DATA (8 fields — visible on click/drilldown) ---
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("file_id", fileId);
         data.put("stage", "S1_INGESTION");
         data.put("stage_name", "File Ingestion");
-        data.put("status", status);
         data.put("error_type", errorType != null ? errorType : "NONE");
+        data.put("error_detail", errorType != null ? errorType : "NONE");
         data.put("file_size", fileSize);
         data.put("file_extension", fileExtension);
         data.put("timestamp", Instant.now().toString());
@@ -88,17 +101,12 @@ public class BusinessEventEmitter {
 
     /**
      * POST the event to Dynatrace Business Events Ingest API.
-     * 
-     * IMPORTANT: We catch all exceptions here so that Dynatrace 
+     *
+     * IMPORTANT: We catch all exceptions here so that Dynatrace
      * communication failures NEVER break the actual pipeline.
      */
     private void sendToDynatrace(Map<String, Object> event) {
         try {
-            if (apiToken == null || apiToken.isBlank() || apiToken.contains("XXXXX")) {
-                log.error("[BIZ_EVENT_ERROR] ❌ Dynatrace API token is NOT configured! Token value: '{}'. Events will NOT be sent.", apiToken);
-                return;
-            }
-
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Api-Token " + apiToken);
@@ -107,16 +115,15 @@ public class BusinessEventEmitter {
 
             String url = dynatraceTenantUrl + BIZ_EVENTS_PATH;
 
-            log.info("[BIZ_EVENT] Sending S1 event to Dynatrace | url={} | token_length={}", url, apiToken.length());
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
-            log.info("[BIZ_EVENT] ✅ S1 event sent to Dynatrace | status={} | type={}",
-                    response.getStatusCode(), event.get("type"));
+            log.info("[BIZ_EVENT] ✅ S1 event sent to Dynatrace | status={} | file_type={} | pipeline_status={}",
+                    response.getStatusCode(), event.get("file_type"), event.get("status"));
 
         } catch (Exception e) {
             // Log the error but DON'T throw — pipeline must continue even if Dynatrace is down
-            log.error("[BIZ_EVENT_ERROR] ❌ Failed to send S1 event to Dynatrace: {}",
-                     e.getMessage());
+            log.warn("[BIZ_EVENT_ERROR] Failed to send S1 event to Dynatrace: {}. " +
+                     "This does NOT affect file processing.", e.getMessage());
         }
     }
 }

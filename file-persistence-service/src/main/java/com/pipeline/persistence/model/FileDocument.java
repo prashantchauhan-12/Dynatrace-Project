@@ -36,6 +36,9 @@ public class FileDocument {
     @Column(name = "file_name")
     private String fileName;
 
+    @Column(name = "file_type")
+    private String fileType;              // FX, EDM, ACCOUNTS, or GENERIC
+
     @Column(name = "title", nullable = false)
     private String title;               // Parsed from [TITLE]
 

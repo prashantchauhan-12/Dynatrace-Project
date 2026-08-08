@@ -17,6 +17,7 @@ public class PersistenceRequest {
 
     private String fileId;          // Correlation ID
     private String fileName;
+    private String fileType;        // FX, EDM, ACCOUNTS, or GENERIC
     private String title;           // From [TITLE]
     private String logoUrl;         // From [LOGO]
     private String content;         // From [CONTENT]

@@ -49,13 +49,14 @@ public class DatabasePersistenceService {
     public void saveDocument(PersistenceRequest request) {
 
         String fileId = request.getFileId();
-        log.info("[S3_DB_PERSIST] ▶ Starting database save | file_id={}", fileId);
+        String fileType = request.getFileType() != null ? request.getFileType() : "GENERIC";
+        log.info("[S3_DB_PERSIST] ▶ Starting database save | file_id={} | file_type={}", fileId, fileType);
 
         try {
             // Check for duplicate
             if (repository.existsByFileId(fileId)) {
                 log.warn("[S3_WARNING] file_id={} already exists in database, skipping", fileId);
-                businessEventEmitter.emitPersistenceEvent(fileId, "FAILED", "DUPLICATE_FILE");
+                businessEventEmitter.emitPersistenceEvent(fileId, "FAILED", "DUPLICATE_FILE", fileType);
                 throw new RuntimeException("File with ID '" + fileId + "' already exists in database");
             }
 
@@ -63,6 +64,7 @@ public class DatabasePersistenceService {
             FileDocument document = FileDocument.builder()
                     .fileId(fileId)
                     .fileName(request.getFileName())
+                    .fileType(fileType)
                     .title(request.getTitle())
                     .logoUrl(request.getLogoUrl())
                     .content(request.getContent())
@@ -77,7 +79,7 @@ public class DatabasePersistenceService {
                     fileId, saved.getId());
 
             // Emit SUCCESS Business Event to Dynatrace
-            businessEventEmitter.emitPersistenceEvent(fileId, "SUCCESS", null);
+            businessEventEmitter.emitPersistenceEvent(fileId, "SUCCESS", null, fileType);
 
         } catch (DataAccessException e) {
             // This catches:
@@ -98,7 +100,7 @@ public class DatabasePersistenceService {
                 log.error("[S3_ERROR] ⚠️ DATABASE AUTHENTICATION FAILURE | file_id={}", fileId);
             }
 
-            businessEventEmitter.emitPersistenceEvent(fileId, "FAILED", errorType);
+            businessEventEmitter.emitPersistenceEvent(fileId, "FAILED", errorType, fileType);
             throw e;
 
         } catch (RuntimeException e) {
@@ -106,7 +108,7 @@ public class DatabasePersistenceService {
                 log.error("[S3_ERROR] file_id={} | error_type=UNEXPECTED | detail={}",
                         fileId, e.getMessage(), e);
                 businessEventEmitter.emitPersistenceEvent(
-                        fileId, "FAILED", "UNEXPECTED: " + e.getMessage());
+                        fileId, "FAILED", "UNEXPECTED: " + e.getMessage(), fileType);
             }
             throw e;
 
@@ -114,7 +116,7 @@ public class DatabasePersistenceService {
             log.error("[S3_ERROR] file_id={} | error_type=UNEXPECTED | detail={}",
                     fileId, e.getMessage(), e);
             businessEventEmitter.emitPersistenceEvent(
-                    fileId, "FAILED", "UNEXPECTED: " + e.getMessage());
+                    fileId, "FAILED", "UNEXPECTED: " + e.getMessage(), fileType);
             throw new RuntimeException(e);
         }
     }
