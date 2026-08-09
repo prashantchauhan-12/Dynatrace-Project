@@ -1,4 +1,4 @@
-# Dynatrace File Processing Pipeline: Architecture & Observability
+# Dynatrace File Processing Pipeline: Enterprise Architecture & Observability
 
 ## 1. Problem Statement
 In modern distributed systems, tracking the lifecycle of a single entity (e.g., a file, transaction, or order) across multiple microservices is notoriously difficult. When a process fails in a multi-stage pipeline, standard infrastructure metrics (CPU, RAM) and simple HTTP logs are insufficient to determine:
@@ -7,36 +7,33 @@ In modern distributed systems, tracking the lifecycle of a single entity (e.g., 
 3. What was the exact business reason for the failure?
 4. What is the overall success/failure rate of the pipeline in real-time?
 
-**The Goal:** Build a highly observable, multi-stage file processing pipeline that leverages Dynatrace Business Events to provide real-time, end-to-end visibility. This allows engineering and business teams to track file lifecycles, identify bottlenecks, and trigger alerts based on specific business outcomes rather than just infrastructure health.
-
-
-### The Pipeline Stages:
-1. **Service 1 (S1) - File Ingestion Service**
-   - **Role:** REST API entry point. Validates file size (max 10MB) and format (TXT, CSV, PDF, DOCX).
-   - **Observability:** Generates a unique `file_id` (correlation ID) which is passed downstream via HTTP headers.
-2. **Service 2 (S2) - File Transformation Service**
-   - **Role:** Parses the document content, extracting specific metadata (Title, Logo, Content, Footer).
-   - **Observability:** Propagates the `file_id` and emits transformation-specific success or failure events.
-3. **Service 3 (S3) - File Persistence Service**
-   - **Role:** Saves the transformed document into a PostgreSQL database.
-   - **Observability:** Logs database connection status and emits the final persistence event, marking the end of the pipeline.
+**The Goal:** Build a highly observable, multi-stage file processing pipeline that leverages **Dynatrace Business Events** to provide real-time, end-to-end visibility. This architecture is designed to scale to 20+ microservices, allowing engineering and business teams to track file lifecycles, identify bottlenecks, and trigger alerts based on specific business outcomes rather than just infrastructure health.
 
 ---
 
-## 2. Architecture Overview & Design
+## 2. Pipeline Architecture & Flow
 
 The system is designed as a synchronous, 3-stage microservice pipeline. Each service is responsible for a distinct business capability and emits a standard CloudEvent-formatted Business Event to Dynatrace upon completion or failure.
 
-### 2.1 High-Level Design (HLD)
+### The Pipeline Stages:
+1. **Service 1 (S1) - File Ingestion Service (Port 8081)**
+   - **Role:** REST API entry point. Validates file size (max 10MB) and format (TXT, CSV, PDF, DOCX).
+   - **Observability:** Generates a unique `X-Correlation-Id` (the `file_id`) which is passed downstream via HTTP headers.
+2. **Service 2 (S2) - File Transformation Service (Port 8082)**
+   - **Role:** Parses the document content, extracting specific metadata (Title, Logo, Content, Footer).
+   - **Observability:** Propagates the `file_id` and emits transformation-specific success or failure events.
+3. **Service 3 (S3) - File Persistence Service (Port 8083)**
+   - **Role:** Saves the transformed document into a PostgreSQL database.
+   - **Observability:** Logs database connection status, catches duplicate data errors, and emits the final persistence event.
 
-The HLD illustrates the macro-level interactions between the client, the three microservices, the database, and the Dynatrace observability platform.
+### 2.1 High-Level Design (HLD)
 
 ```mermaid
 graph TD
-    Client[Client / Postman] -->|HTTP POST Upload| S1(S1: Ingestion Service :8081)
-    S1 -->|Validates & Forwards HTTP POST| S2(S2: Transformation Service :8082)
-    S2 -->|Parses & Forwards HTTP POST| S3(S3: Persistence Service :8083)
-    S3 -->|JDBC INSERT| DB[(PostgreSQL :5432)]
+    Client[Client / Postman] -->|HTTP POST Upload| S1(S1: Ingestion Service)
+    S1 -->|Validates & Forwards HTTP POST| S2(S2: Transformation Service)
+    S2 -->|Parses & Forwards HTTP POST| S3(S3: Persistence Service)
+    S3 -->|JDBC INSERT| DB[(PostgreSQL)]
     
     S1 -.->|Business Event POST| DT((Dynatrace))
     S2 -.->|Business Event POST| DT
@@ -44,8 +41,6 @@ graph TD
 ```
 
 ### 2.2 Low-Level Design (LLD)
-
-The LLD breaks down the internal components of each Spring Boot microservice, showing how incoming requests are processed, validated, and forwarded. Importantly, the **BusinessEventEmitter** in each service is the *only* component responsible for sending events to Dynatrace.
 
 ```mermaid
 flowchart LR
@@ -80,242 +75,154 @@ flowchart LR
     E3 -.->|Business Event POST| DT
 ```
 
-### 2.2.1 Core Data Structures & DTOs
+---
 
-To facilitate strongly-typed communication between services and guarantee data integrity before database insertion, the following core Data Transfer Objects (DTOs) and Entities are utilized:
+## 3. Data Structures & Business Events
 
-1. **`IngestionPayload` / `TransformationRequest` (S1 $\rightarrow$ S2)**
-   - Carries the raw file byte array (or Base64 string), original filename, and the correlation `file_id`.
-   - *Purpose:* Decouples the HTTP multipart upload layer from internal service-to-service communication.
+A critical requirement of this architecture is how data is structured and sent to Dynatrace. We transmit **10 distinct parameters** per event, but UI requirements dictate that only 2 are painted on the Honeycomb surface, while the remaining 8 are stored in the drill-down.
 
-2. **`TransformationResponse` / `PersistenceRequest` (S2 $\rightarrow$ S3)**
-   - Contains the structured, parsed metadata extracted by the Transformation Service using regex parsers.
-   - *Fields Include:* `fileId`, `fileName`, `title`, `logoUrl`, `content`, `footer`.
-   - *Purpose:* Represents the clean, business-ready data object required for final storage.
+### 3.1 The 10 Parameters
+To achieve this UI separation, we split the JSON payload into Top-Level and Nested properties:
 
-3. **`FileDocument` (JPA Entity in S3)**
-   - The `@Entity` class mapping directly to the PostgreSQL `file_documents` table.
-   - *Fields Include:* `id` (PK), `fileId` (unique correlation ID), `title`, `logoUrl`, `content` (TEXT), `footer`, `status`, `createdAt`.
-   - *Purpose:* Ensures ACID compliance and provides Object-Relational Mapping (ORM) for the final persistence stage.
+**Top-Level (Mapped to UI Names):**
+1. `file_type`: (e.g., FX, EDM, ACCOUNTS)
+2. `status`: (SUCCESS or FAILED)
 
-4. **`BusinessEventPayload` (Map<String, Object>)**
-   - The standardized schema generated by the `BusinessEventEmitter` sent to the Dynatrace Event Hub.
-   - *Fields Include:* `specversion`, `id`, `source`, `type`, `data` (containing `file_id`, `stage`, `status`, `error_detail`, `timestamp`).
-   - *Purpose:* Adheres strictly to the CloudEvents specification, enabling lossless, unified observability querying via DQL.
+**Nested Data Block (Available on Drill-Down):**
+3. `file_id`: Unique Correlation ID.
+4. `stage`: Stage identifier (e.g., S1_INGESTION).
+5. `stage_name`: Human-readable stage name.
+6. `error_type`: High-level error categorization.
+7. `error_detail`: Exact exception message or business logic failure reason.
+8. `file_size`: Size of the file in bytes.
+9. `file_extension`: (e.g., .txt).
+10. `timestamp`: ISO-8601 timestamp of the event.
 
-### 2.3 Interaction Flowchart (Sequence Diagram)
-
-This sequence diagram details the strict synchronous flow of the pipeline, including how Dynatrace Business Events are emitted at every critical juncture (both successes and failures).
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant S1 as Ingestion (S1)
-    participant S2 as Transformation (S2)
-    participant S3 as Persistence (S3)
-    participant DB as PostgreSQL
-    participant DT as Dynatrace
-
-    C->>S1: POST /api/files/upload (file, X-Correlation-Id)
-    
-    alt Invalid File Format
-        S1-->>DT: POST /api/v2/bizevents (FAILED)
-        S1-->>C: 400 Bad Request
-    else Valid File Format
-        S1-->>DT: POST /api/v2/bizevents (SUCCESS)
-        S1->>S2: POST /api/transform (file bytes, headers)
-        
-        alt Missing Content/Footer
-            S2-->>DT: POST /api/v2/bizevents (FAILED)
-            S2-->>S1: 400 Bad Request
-            S1-->>C: 400 Pipeline Failed
-        else Parsed Successfully
-            S2-->>DT: POST /api/v2/bizevents (SUCCESS)
-            S2->>S3: POST /api/persist (JSON metadata)
-            
-            S3->>DB: INSERT INTO files
-            
-            alt DB Connection Failed
-                S3-->>DT: POST /api/v2/bizevents (FAILED)
-                S3-->>S2: 500 Internal Error
-                S2-->>S1: 500 Internal Error
-                S1-->>C: 500 Pipeline Failed
-            else DB Save Success
-                S3-->>DT: POST /api/v2/bizevents (SUCCESS)
-                S3-->>S2: 200 OK
-                S2-->>S1: 200 OK
-                S1-->>C: 200 OK
-            end
-        end
-    end
+**Sample JSON Payload emitted to Dynatrace:**
+```json
+{
+  "specversion": "1.0",
+  "id": "uuid-1234",
+  "source": "file-ingestion-service",
+  "type": "com.pipeline.file.ingested",
+  "file_type": "FX",
+  "status": "SUCCESS",
+  "data": {
+    "file_id": "fx-099",
+    "stage": "S1_INGESTION",
+    "stage_name": "File Ingestion",
+    "error_type": "NONE",
+    "error_detail": "NONE",
+    "file_size": 1024,
+    "file_extension": ".txt",
+    "timestamp": "2023-10-27T10:00:00Z"
+  }
+}
 ```
+
+### 3.2 Data Integrity & Duplicate Handling
+The architecture relies on PostgreSQL to enforce data integrity. If a user uploads the exact same `file_id` twice:
+- S1 succeeds.
+- S2 succeeds.
+- S3 attempts to INSERT into the database, but triggers a `DataIntegrityViolationException` (Unique Constraint on `file_id`).
+- S3 gracefully catches the exception, avoids crashing the pipeline, and emits a `FAILED` event to Dynatrace with `error_detail: DUPLICATE_FILE`. 
+- The Dynatrace DAG accurately reflects this: S1 and S2 are Green, and S3 is Red.
 
 ---
 
-## 3. Dynatrace Implementation (REPORT)
+## 4. Enterprise Operations Workflow
 
-Below is the detailed implementation evidence showcasing how Dynatrace captures and visualizes the business events across different operational scenarios in our pipeline.
+In a production environment processing thousands of concurrent files, the Dynatrace dashboard is used as an **Aggregate Heatmap**, not a single-file tracker.
 
-### Case 1: Failure/Error in Ingestion Service (S1)
-**Input:**  
-The above input is invalid since it is in `.jpg` format.  
-Because S1 strictly validates allowed file formats (TXT, CSV, PDF, DOCX), it rejects the payload before it can proceed downstream.
-
-**Pipeline Health Map in Dynatrace:**  
-![Ingestion Failure Evidence](./ScreenShort/image.png)
-
-### Case 2: Failure/Error in Transformation Service (S2)
-**Input:**  
-The above input is invalid as the file does not contain a `[CONTENT]` tag.  
-S1 successfully validates the file type, but S2 fails during parsing because the required content section is missing.
-
-**Pipeline Health Map in Dynatrace:**  
-![Transformation Failure Evidence](./ScreenShort/image copy.png)
-
-### Case 3: Failure/Error in Persistence Service (S3)
-**Event Trigger:**  
-The above service fails as the Database is not up and running.  
-Both S1 and S2 successfully process the document, but S3 fails to persist the data to PostgreSQL due to a connection failure, triggering a critical alert.
-
-**Pipeline Health Map in Dynatrace:**  
-![Persistence Failure Evidence](./ScreenShort/image copy 2.png)
-
-### Case 4: All Services are Working as Expected
-**Event Trigger:**  
-A perfectly formatted document is ingested, transformed, and persisted successfully across the entire pipeline.
-
-**Pipeline Health Map in Dynatrace:**  
-![Successful Pipeline Evidence 1](./ScreenShort/image copy 3.png)  
-![Successful Pipeline Evidence 2](./ScreenShort/image copy 4.png)  
+### The "Find and Trace" Workflow:
+1. **Aggregate Monitoring:** The Operations Team monitors the "Overall Failure %" and the DAG Honeycomb (which tracks the total number of failures per stage).
+2. **Identifying the Culprit:** If the S3 Honeycomb turns Red, the team looks at the **Failures by Stage (Error Log)** table on the dashboard. This table streams live errors, providing the exact `file_id` (e.g., `fx-8924`) that failed.
+3. **Deep Dive Tracing:** The team copies `fx-8924`, opens a Dynatrace Notebook, and pastes it into the DAG query. The DAG instantly filters out the noise of thousands of files and draws the exact multi-hop path of `fx-8924`, showing precisely where it broke. They can then "Open with Notebook" on the Red node to read the 8 nested parameters (like `DUPLICATE_FILE`).
 
 ---
 
-## 4. Dashboards & DQL Queries
+## 5. Dynatrace DQL Queries (Dashboard Blueprint)
 
-To visualize the pipeline health demonstrated in the cases above, we built a real-time dashboard using Dynatrace Query Language (DQL). Below are the exact, advanced queries used to construct our dashboard tiles, handling dynamic status evaluation and JSON field extraction:
+Below are the optimized DQL queries used to power the enterprise dashboard.
 
-### 4.1. Total Files Processed
+### 5.1 Pipeline Health Map (DAG)
+Groups by `stage` and `file_type` to draw the multi-hop Honeycomb DAG.
 ```sql
 fetch bizevents
-| fieldsAdd file_id = jsonField(data, "file_id")
-| summarize totalFiles = countDistinct(file_id)
-```
-
-### 4.2. Successful Pipelines
-```sql
-fetch bizevents
+| filter source == "file-ingestion-service"
+    OR source == "file-transformation-service"
+    OR source == "file-persistence-service"
 | fieldsAdd
-  file_id = jsonField(data, "file_id"),
-  stage = jsonField(data, "stage"),
-  status = jsonField(data, "status")
-| summarize
-  stages = collectArray(stage),
-  statuses = collectArray(status),
-  by:{file_id}
-| filter contains(toString(stages), "S1_INGESTION")
-  and contains(toString(stages), "S2_TRANSFORMATION")
-  and contains(toString(stages), "S3_DB_PERSISTENCE")
-  and not contains(toString(statuses), "FAILED")
-| summarize successfulPipelines = count()
-```
-
-### 4.3. Overall Failure Percentage
-```sql
-fetch bizevents
-| fieldsAdd
-  file_id = jsonField(data, "file_id"),
-  stage = jsonField(data, "stage"),
-  status = jsonField(data, "status")
-| summarize
-  stages = collectArray(stage),
-  statuses = collectArray(status),
-  by:{file_id}
-| fieldsAdd
-  successful =
-    contains(toString(stages), "S1_INGESTION")
-    and contains(toString(stages), "S2_TRANSFORMATION")
-    and contains(toString(stages), "S3_DB_PERSISTENCE")
-    and not contains(toString(statuses), "FAILED")
-| summarize
-  totalFiles = count(),
-  successfulPipelines = countIf(successful)
-| fieldsAdd
-  failedPipelines = totalFiles - successfulPipelines
-| fieldsAdd
-  failurePercentage = (failedPipelines * 100.0) / totalFiles
-```
-
-### 4.4. Dynamic Pipeline Health Map (Latest Execution)
-*This query uses prioritization logic to determine the active status of each stage for the most recent file processed.*
-```sql
-data
-  record(stage = "S1_INGESTION",    status = "NOT_STARTED", priority = 1),
-  record(stage = "S2_TRANSFORMATION", status = "NOT_STARTED", priority = 1),
-  record(stage = "S3_DB_PERSISTENCE", status = "NOT_STARTED", priority = 1)
-| append [
-  fetch bizevents
-  | fieldsAdd
     file_id = jsonField(data, "file_id"),
     stage = jsonField(data, "stage"),
-    status = jsonField(data, "status"),
-    eventTime = toTimestamp(jsonField(data, "timestamp"))
-  // Find latest file
-  | summarize
-    latestTime = max(eventTime),
-    by:{file_id}
-  | sort latestTime desc
-  | limit 1
-  // Fetch all events for latest file
-  | join [
-    fetch bizevents
-    | fieldsAdd
-      file_id = jsonField(data, "file_id"),
-      stage = jsonField(data, "stage"),
-      status = jsonField(data, "status")
-    ], on:{file_id}
-  // Assign priority
-  | fields
-    stage = right.stage,
-    status = right.status,
-    priority =
-      if(right.status == "FAILED", 3,
-      else:
-        if(right.status == "SUCCESS", 2,
-        else:1))
-]
-// Keep highest priority per stage
-| summarize
-  maxPriority = max(priority),
-  by:{stage}
-// Convert priority back to status
-| fields
-  stage,
-  status =
-    if(maxPriority == 3, "FAILED",
-    else:
-      if(maxPriority == 2, "SUCCESS",
-      else:"NOT_STARTED"))
+    stage_name = jsonField(data, "stage_name"),
+    error_type = jsonField(data, "error_type"),
+    error_detail = jsonField(data, "error_detail"),
+    file_size = jsonField(data, "file_size"),
+    file_extension = jsonField(data, "file_extension")
+| filter file_id == "fx-099"    // Remove this filter for aggregate heatmap view
+| sort timestamp desc
+| summarize 
+    latest_status = takeFirst(status), 
+    events = count(),
+    file_id = takeFirst(file_id),
+    stage_name = takeFirst(stage_name),
+    error_type = takeFirst(error_type),
+    error_detail = takeFirst(error_detail),
+    file_size = takeFirst(file_size),
+    file_extension = takeFirst(file_extension),
+    event_time = takeFirst(timestamp),
+    by: {stage, file_type}
 | sort stage asc
 ```
 
-### 4.5. Failures by Stage
+### 5.2 Failures by Stage (Error Drill-Down Log)
+Acts as a live feed of broken files for the Operations Team.
 ```sql
 fetch bizevents
+| filter source == "file-ingestion-service"
+    OR source == "file-transformation-service"
+    OR source == "file-persistence-service"
 | fieldsAdd
-  stage = jsonField(data, "stage"),
-  status = jsonField(data, "status")
-| summarize
-  total = count(),
-  failCount = countIf(status == "FAILED"),
-  by:{stage}
+    file_id = jsonField(data, "file_id"),
+    stage = jsonField(data, "stage"),
+    error_type = jsonField(data, "error_type"),
+    error_detail = jsonField(data, "error_detail")
+| filter status == "FAILED"
+| fields file_id, file_type, stage, error_type, error_detail, timestamp
+| sort timestamp desc
+```
+
+### 5.3 Pipeline Health by File Type
+Tracks success/failure throughput categorized by business verticals (FX, EDM, ACCOUNTS).
+```sql
+fetch bizevents
+| filter source == "file-ingestion-service"
+    OR source == "file-transformation-service"
+    OR source == "file-persistence-service"
+| fieldsAdd stage = jsonField(data, "stage")
+| summarize 
+    total = count(),
+    success = countIf(status == "SUCCESS"),
+    failed = countIf(status == "FAILED"),
+    by: {file_type, stage}
 ```
 
 ---
 
-## 5. Conclusion & Next Steps
+## 6. How to Run Locally
 
-By combining Spring Boot microservices with Dynatrace Business Events, we have achieved **100% visibility** into our file processing pipeline. Engineering can now pinpoint exactly where and why a file failed (e.g., Case 2: Missing Content at S2), bridging the gap between technical operations and business outcomes.
-
-**Next Steps:**
-- Integrate Dynatrace OneAgent for deeper code-level profiling and automatic pure-path tracing.
-- Implement asynchronous messaging (Kafka/RabbitMQ) between S1 and S2 to handle massive traffic spikes gracefully.
+1. Start the PostgreSQL Database and 3 Spring Boot Microservices:
+```powershell
+.\start-pipeline.ps1
+```
+2. Send test files via Postman or `curl`:
+```powershell
+curl -X POST "http://localhost:8081/api/files/upload" -F "file=@sample-files/valid-document.txt" -F "file_type=FX" -H "X-Correlation-Id: fx-001"
+```
+```powershell
+curl -X POST "http://localhost:8081/api/files/upload" -F "file=@sample-files/valid-document.txt" -F "file_type=EDM" -H "X-Correlation-Id: edm-001"
+```
+```powershell
+curl -X POST "http://localhost:8081/api/files/upload" -F "file=@sample-files/valid-document.txt" -F "file_type=ACCOUNTS" -H "X-Correlation-Id: acc-001"
+```
