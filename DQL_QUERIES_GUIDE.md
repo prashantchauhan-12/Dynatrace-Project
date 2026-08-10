@@ -277,8 +277,7 @@ fetch bizevents
     OR source == "file-transformation-service"
     OR source == "file-persistence-service"
 | fieldsAdd
-    file_id = jsonField(data, "file_id"),
-    status = jsonField(data, "status")
+    file_id = jsonField(data, "file_id")
 | summarize statuses = collectArray(status), event_time = max(timestamp), by: {file_id}
 | fieldsAdd final_status = if(contains(toString(statuses), "FAILED"), "FAIL", else: "SUC")
 | fields file_id, final_status, event_time
