@@ -247,7 +247,7 @@ fetch bizevents
     error_detail = jsonField(data, "error_detail"),
     file_size = jsonField(data, "file_size"),
     file_extension = jsonField(data, "file_extension")
-| filter in(file_id, $file_id) OR $file_id == "*"    // <-- Uses Dashboard Variable!
+| filter in(file_id, $file_id)    // <-- Uses Dashboard Variable!
 | sort timestamp desc
 | summarize 
     latest_status = takeFirst(status), 
