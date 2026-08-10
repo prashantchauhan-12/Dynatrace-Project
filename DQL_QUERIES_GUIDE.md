@@ -247,7 +247,6 @@ fetch bizevents
     error_detail = jsonField(data, "error_detail"),
     file_size = jsonField(data, "file_size"),
     file_extension = jsonField(data, "file_extension")
-| filter in(file_id, $file_id)    // <-- Uses Dashboard Variable!
 | sort timestamp desc
 | summarize 
     latest_status = takeFirst(status), 
@@ -268,6 +267,27 @@ fetch bizevents
 **Visualization:** Select **"Table"**. Each row = one stage. Green ✅ for SUCCESS, Red ❌ for FAILED.
 
 ---
+
+### 8. Recent Files (Interactive DAG Filter)
+*As requested by the manager's drawing, this table shows recent files and their final status. Clicking a row automatically filters the DAG.*
+
+```sql
+fetch bizevents
+| filter source == "file-ingestion-service"
+    OR source == "file-transformation-service"
+    OR source == "file-persistence-service"
+| fieldsAdd
+    file_id = jsonField(data, "file_id"),
+    status = jsonField(data, "status")
+| summarize statuses = collectArray(status), event_time = max(timestamp), by: {file_id}
+| fieldsAdd final_status = if(contains(toString(statuses), "FAILED"), "FAIL", else: "SUC")
+| fields file_id, final_status, event_time
+| sort event_time desc
+| limit 20
+```
+
+**Visualization:** Select **"Table"**. 
+**Usage:** Click on any `file_id` in this table to instantly filter the Pipeline Health Map (DAG)!
 
 ## Query 8: Failures by Stage (Error Drill-Down)
 
