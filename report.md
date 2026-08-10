@@ -3,21 +3,25 @@
 ## 1. Executive Summary
 We have successfully designed and implemented a comprehensive, real-time observability dashboard in Dynatrace for the File Processing Pipeline (Ingestion -> Transformation -> Persistence). The dashboard provides instant, visual health tracking for all files entering the system, categorized by file type, with full drill-down capabilities for failure analysis.
 
-![Dashboard Overview](./screenshots/dashboard_top.png)
-
 ## 2. Dashboard Accomplishments
 The new Dynatrace dashboard features the following capabilities, powered by advanced DQL (Dynatrace Query Language):
-- **Real-Time Pipeline DAG:** A visual Directed Acyclic Graph (DAG) that instantly shows the exact stage of any specific file using a dropdown (`$file_id`).
-- **Auto-Detect Latest File:** A dedicated tile that automatically hunts down the newest uploaded file and displays its real-time progress through the pipeline without manual intervention.
 
-![Recent Files and Error Analysis](./screenshots/dashboard_middle.png)
+### A. Real-Time Pipeline DAGs
+We built visual Directed Acyclic Graphs (DAGs) that instantly show the exact stage of files. This includes a tile for tracking a specific file via a dropdown (`$file_id`), and an **Auto-Detect Latest File** tile that automatically hunts down the newest uploaded file without manual intervention.
 
-- **Categorized Heatmaps:** Multi-file Heatmap matrices that perfectly align 3 distinct pipeline stages (S1, S2, S3) per file. We created dedicated, filtered matrices for **FX**, **EDM**, and **ACCOUNTS** file types, allowing teams to monitor large volumes of concurrent files at a glance.
+![Pipeline DAGs](screenshots/dashboard_top.png)
 
-![Pipeline Heatmaps (All & FX)](./screenshots/dashboard_heatmaps_1.png)
-![Pipeline Heatmaps (EDM & Accounts)](./screenshots/dashboard_heatmaps_2.png)
+### B. Recent Files & Error Analysis
+We created an interactive "Recent Files" tracker. Clicking on any file instantly filters the entire dashboard. We also implemented a "Failures by Stage" log that pulls up critical parameters (including `error_type` and `error_detail`), enabling developers to instantly debug failures without searching through logs.
 
-- **Interactive Drill-downs:** Clicking on any cell in the DAGs or Heatmaps pulls up 8 critical parameters (including `error_type` and `error_detail`), enabling developers to instantly debug failures without searching through logs.
+![Recent Files and Error Analysis](screenshots/dashboard_middle.png)
+
+### C. Categorized Pipeline Heatmaps
+We designed multi-file Heatmap matrices that perfectly align 3 distinct pipeline stages (S1, S2, S3) per file. We created dedicated, filtered matrices for **FX**, **EDM**, and **ACCOUNTS** file types, allowing teams to monitor large volumes of concurrent files at a glance.
+
+![Pipeline Heatmaps (All & FX)](screenshots/dashboard_heatmaps_1.png)
+
+![Pipeline Heatmaps (EDM & Accounts)](screenshots/dashboard_heatmaps_2.png)
 
 ## 3. Exploration: Enterprise Retriggering & Idempotency
 As part of the final requirement, we explored how to handle file re-uploads (retries) gracefully without corrupting the pipeline's history. 
