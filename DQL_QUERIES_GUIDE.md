@@ -235,6 +235,8 @@ fetch bizevents
 Just replace `test-001` with your actual file_id:
 
 ```sql
+// Step 1: Pre-generate the 3 stages using array expansion to avoid syntax errors
+
 fetch bizevents
 | filter source == "file-ingestion-service"
     OR source == "file-transformation-service"
@@ -287,6 +289,58 @@ fetch bizevents
 
 **Visualization:** Select **"Table"**. 
 **Usage:** Click on any `file_id` in this table to instantly filter the Pipeline Health Map (DAG)!
+
+// Query 9: Pipeline Health Map (DAG View - Single File)
+
+// Step 1: Generate the 3 permanent Grey stages
+data
+  record(stage = "S1_INGESTION"),
+  record(stage = "S2_TRANSFORMATION"),
+  record(stage = "S3_DB_PERSISTENCE")
+| fieldsAdd priority = 1, dummy = true
+
+// Step 2: Fetch the real events and apply your Dashboard Variable
+| append [
+  fetch bizevents
+  | filter source == "file-ingestion-service"
+        OR source == "file-transformation-service"
+        OR source == "file-persistence-service"
+  | fieldsAdd 
+      file_id = jsonField(data, "file_id"),
+      stage = jsonField(data, "stage"),
+      error_type = jsonField(data, "error_type"),
+      error_detail = jsonField(data, "error_detail"),
+      file_size = jsonField(data, "file_size"),
+      file_extension = jsonField(data, "file_extension")
+      
+  // 👉 This links perfectly to your dropdown!
+  | filter in(file_id, $file_id)
+  
+  | fieldsAdd priority = if(status == "FAILED", 3, else: if(status == "SUCCESS", 2, else: 1)), dummy = false
+]
+
+// 👉 Sort so that REAL events (dummy=false) rise to the top
+| sort dummy asc, timestamp desc
+
+// Step 3: Keep the highest priority status, AND collect all 8 extra parameters!
+| summarize 
+    max_priority = max(priority), 
+    events = countIf(dummy == false),
+    file_id = takeFirst(file_id),
+    error_type = takeFirst(error_type),
+    error_detail = takeFirst(error_detail),
+    file_size = takeFirst(file_size),
+    file_extension = takeFirst(file_extension),
+    file_type = takeFirst(file_type),
+    event_time = takeFirst(timestamp),
+    by: {stage}
+    
+| fieldsAdd latest_status = if(max_priority == 3, "FAILED", else: if(max_priority == 2, "SUCCESS", else: "NOT_STARTED"))
+
+// Step 4: Add pretty names
+| fieldsAdd stage_name = if(stage == "S1_INGESTION", "File Ingestion", else: if(stage == "S2_TRANSFORMATION", "Data Transformation", else: "Database Persistence"))
+| sort stage asc
+
 
 ## Query 8: Failures by Stage (Error Drill-Down)
 
@@ -424,101 +478,3 @@ If you edit a file that previously succeeded, but upload it again with the exact
 - A brand new trace (`fx-123-v1724...`) appears on the DAG map progressing through `S1 -> S2 -> S3`.
 
 This combination of **Smart Java Logic** and **Max() DQL Queries** results in a robust, bulletproof observability pipeline.
-
----
-
-## 🛠️ Advanced Visualizations (Table Grids & Heatmaps)
-
-To provide a perfect, color-coded tracking grid for your files, you can use the following queries to create Table Grids or Heatmaps (with 1 file per row and exact stages per column).
-
-### The Unified File Tracker (Color-Coded Table)
-Set visualization to **Table** and use Thresholds on columns (Green=SUCCESS, Red=FAILED, Grey=NOT_STARTED).
-
-```sql
-// Step 1: Fetch the most recent 10 files
-fetch bizevents
-| filter source == "file-ingestion-service" OR source == "file-transformation-service" OR source == "file-persistence-service"
-| fieldsAdd 
-    file_id = jsonField(data, "file_id"),
-    stage = jsonField(data, "stage")
-    
-// Step 2: Create exactly 3 columns per file!
-| summarize 
-    Step1_Ingestion = max(if(stage == "S1_INGESTION", status, else: "")),
-    Step2_Transform = max(if(stage == "S2_TRANSFORMATION", status, else: "")),
-    Step3_Storage = max(if(stage == "S3_DB_PERSISTENCE", status, else: "")),
-    latest_time = max(timestamp),
-    by: {file_id}
-| sort latest_time desc
-| limit 10
-
-// Step 3: Fill in the blanks for stages that haven't started yet
-| fieldsAdd 
-    Step1_Ingestion = if(Step1_Ingestion == "", "NOT_STARTED", else: Step1_Ingestion),
-    Step2_Transform = if(Step2_Transform == "", "NOT_STARTED", else: Step2_Transform),
-    Step3_Storage = if(Step3_Storage == "", "NOT_STARTED", else: Step3_Storage)
-    
-| fields file_id, Step1_Ingestion, Step2_Transform, Step3_Storage, latest_time
-```
-
-### The FX-Only Table
-If you want a dedicated table exclusively for FX files:
-
-```sql
-fetch bizevents
-| filter source == "file-ingestion-service" OR source == "file-transformation-service" OR source == "file-persistence-service"
-| fieldsAdd 
-    file_id = jsonField(data, "file_id"),
-    stage = jsonField(data, "stage")
-| summarize 
-    Step1_Ingestion = max(if(stage == "S1_INGESTION", status, else: "")),
-    Step2_Transform = max(if(stage == "S2_TRANSFORMATION", status, else: "")),
-    Step3_Storage = max(if(stage == "S3_DB_PERSISTENCE", status, else: "")),
-    latest_time = max(timestamp),
-    pipeline_type = max(file_type), 
-    by: {file_id}
-| filter pipeline_type == "FX"
-| sort latest_time desc
-| limit 10
-| fieldsAdd 
-    Step1_Ingestion = if(Step1_Ingestion == "", "NOT_STARTED", else: Step1_Ingestion),
-    Step2_Transform = if(Step2_Transform == "", "NOT_STARTED", else: Step2_Transform),
-    Step3_Storage = if(Step3_Storage == "", "NOT_STARTED", else: Step3_Storage)
-| fields file_id, Step1_Ingestion, Step2_Transform, Step3_Storage, latest_time
-```
-
-### Dedicated Heatmaps by File Type
-To create the perfect Y-axis (files) and X-axis (stages) grid using the **Heatmap** visualization, use these 3 queries for your 3 dedicated tiles.
-
-**1. The FX Pipeline Heatmap**
-```sql
-fetch bizevents
-| filter source == "file-ingestion-service" OR source == "file-transformation-service" OR source == "file-persistence-service"
-| fieldsAdd 
-    file_id = jsonField(data, "file_id"),
-    stage = jsonField(data, "stage")
-| summarize 
-    s1_status = max(if(stage == "S1_INGESTION", status, else: "")),
-    s2_status = max(if(stage == "S2_TRANSFORMATION", status, else: "")),
-    s3_status = max(if(stage == "S3_DB_PERSISTENCE", status, else: "")),
-    latest_time = max(timestamp),
-    pipeline_type = max(file_type),
-    by: {file_id}
-| filter pipeline_type == "FX"      // 👉 ONLY KEEP FX FILES
-| sort latest_time desc
-| limit 10
-| fieldsAdd dummy_stages = splitString("S1_INGESTION,S2_TRANSFORMATION,S3_DB_PERSISTENCE", ",")
-| expand stage = dummy_stages
-| fieldsAdd latest_status = if(stage == "S1_INGESTION", s1_status, else: if(stage == "S2_TRANSFORMATION", s2_status, else: s3_status))
-| fieldsAdd events = if(latest_status == "", 0, else: 1)
-| fieldsAdd latest_status = if(latest_status == "", "NOT_STARTED", else: latest_status)
-| fieldsAdd stage_name = concat(file_id, " | ", if(stage == "S1_INGESTION", "Ingestion", else: if(stage == "S2_TRANSFORMATION", "Transform", else: "Storage")))
-| sort latest_time desc, stage asc
-| fields file_id, stage, stage_name, latest_status, events
-```
-
-**2. The EDM Pipeline Heatmap**
-*(Same query as above, but change `| filter pipeline_type == "FX"` to `== "EDM"`)*
-
-**3. The ACCOUNTS Pipeline Heatmap**
-*(Same query as above, but change `| filter pipeline_type == "FX"` to `== "ACCOUNTS"`)*
