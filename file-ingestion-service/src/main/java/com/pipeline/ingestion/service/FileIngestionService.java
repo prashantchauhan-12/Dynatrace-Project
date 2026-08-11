@@ -13,6 +13,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -46,6 +48,10 @@ public class FileIngestionService {
     @Value("${service.transformation.url}")
     private String transformationServiceUrl;
 
+    // URL of Service 3 (Persistence) — loaded from application.yml
+    @Value("${service.persistence.url}")
+    private String persistenceServiceUrl;
+
     public FileIngestionService(BusinessEventEmitter businessEventEmitter, RestTemplate restTemplate) {
         this.businessEventEmitter = businessEventEmitter;
         this.restTemplate = restTemplate;
@@ -65,10 +71,32 @@ public class FileIngestionService {
      */
     public String processFile(MultipartFile file, String correlationId, String fileType) throws IOException {
 
-        // Step 1: Generate file_id (correlation ID)
-        String fileId = (correlationId != null && !correlationId.isBlank())
-                ? correlationId
-                : UUID.randomUUID().toString();
+        // Compute SHA-256 Hash
+        String contentHash = computeHash(file.getBytes());
+
+        // Generate or version file_id
+        String fileId = correlationId;
+        if (fileId != null && !fileId.isBlank()) {
+            try {
+                String statusUrl = persistenceServiceUrl.replace("/persist", "/status/") + fileId;
+                ResponseEntity<Map> response = restTemplate.getForEntity(statusUrl, Map.class);
+                Map<String, Object> body = response.getBody();
+                if (body != null && Boolean.TRUE.equals(body.get("exists"))) {
+                    String existingHash = (String) body.get("contentHash");
+                    if (contentHash.equals(existingHash)) {
+                        log.info("[S1_IDEMPOTENCY] ✅ Exact duplicate detected. Skipping pipeline for file_id={}", fileId);
+                        return fileId;
+                    } else {
+                        log.warn("[S1_AUTO_VERSION] ⚠️ File content changed for file_id={}. Auto-versioning.", fileId);
+                        fileId = fileId + "-v" + (System.currentTimeMillis() / 1000);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[S1_IDEMPOTENCY] Failed to check status from S3: {}", e.getMessage());
+            }
+        } else {
+            fileId = UUID.randomUUID().toString();
+        }
 
         String fileName = file.getOriginalFilename();
         long fileSize = file.getSize();
@@ -115,7 +143,7 @@ public class FileIngestionService {
         log.info("[S1_INGESTION] ✅ Validation passed | file_id={}", fileId);
 
         // Step 5: Forward to Service 2 (Transformation)
-        forwardToTransformationService(fileId, file, fileName, fileSize, extension, normalizedFileType);
+        forwardToTransformationService(fileId, file, fileName, fileSize, extension, normalizedFileType, contentHash);
 
         return fileId;
     }
@@ -126,7 +154,8 @@ public class FileIngestionService {
      */
     private void forwardToTransformationService(String fileId, MultipartFile file,
                                                  String fileName, long fileSize,
-                                                 String extension, String fileType) throws IOException {
+                                                 String extension, String fileType,
+                                                 String contentHash) throws IOException {
         log.info("[S1_INGESTION] 📤 Forwarding to S2 (Transformation) | file_id={} | file_type={}", fileId, fileType);
 
         // Read file content as string
@@ -140,6 +169,7 @@ public class FileIngestionService {
                 .fileExtension(extension)
                 .fileType(fileType)
                 .fileContent(fileContent)
+                .contentHash(contentHash)
                 .build();
 
         // Send HTTP POST to Service 2
@@ -168,5 +198,23 @@ public class FileIngestionService {
             return "";
         }
         return fileName.substring(fileName.lastIndexOf(".") + 1);
+    }
+
+    private String computeHash(byte[] content) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] encodedhash = digest.digest(content);
+            StringBuilder hexString = new StringBuilder(2 * encodedhash.length);
+            for (byte b : encodedhash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            return "UNKNOWN_HASH";
+        }
     }
 }

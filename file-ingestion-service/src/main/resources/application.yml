@@ -24,10 +24,12 @@ dynatrace:
   api:
     token: ${DYNATRACE_API_TOKEN}
 
-# ---- Service 2 (Transformation) URL ----
+# ---- Service URLs ----
 service:
   transformation:
     url: http://localhost:8082/api/transform
+  persistence:
+    url: http://localhost:8083/api/persist
 
 # ---- Actuator ----
 management:

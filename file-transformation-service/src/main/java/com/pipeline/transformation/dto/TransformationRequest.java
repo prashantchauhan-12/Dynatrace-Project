@@ -21,4 +21,5 @@ public class TransformationRequest {
     private String fileExtension;
     private String fileType;        // FX, EDM, ACCOUNTS, or GENERIC
     private String fileContent;     // Raw text content to parse
+    private String contentHash;     // Passed from S1 -> S2 -> S3
 }

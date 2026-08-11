@@ -22,4 +22,5 @@ public class PersistenceRequest {
     private String logoUrl;         // From [LOGO]
     private String content;         // From [CONTENT]
     private String footer;          // From [FOOTER]
+    private String contentHash;     // Passed from S1 -> S2 -> S3
 }

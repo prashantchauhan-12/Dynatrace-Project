@@ -69,6 +69,7 @@ public class DatabasePersistenceService {
                     .logoUrl(request.getLogoUrl())
                     .content(request.getContent())
                     .footer(request.getFooter())
+                    .contentHash(request.getContentHash())
                     .status("SUCCESS")
                     .build();
 
@@ -119,5 +120,9 @@ public class DatabasePersistenceService {
                     fileId, "FAILED", "UNEXPECTED: " + e.getMessage(), fileType);
             throw new RuntimeException(e);
         }
+    }
+
+    public java.util.Optional<FileDocument> findByFileId(String fileId) {
+        return repository.findByFileId(fileId);
     }
 }

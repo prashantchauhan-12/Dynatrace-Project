@@ -22,4 +22,5 @@ public class TransformedDocument {
     private String logoUrl;         // Extracted from [LOGO] section
     private String content;         // Extracted from [CONTENT] section
     private String footer;          // Extracted from [FOOTER] section
+    private String contentHash;     // Passed from S1 -> S2 -> S3
 }

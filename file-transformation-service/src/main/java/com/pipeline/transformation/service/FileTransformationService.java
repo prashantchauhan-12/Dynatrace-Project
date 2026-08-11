@@ -104,6 +104,7 @@ public class FileTransformationService {
                     .logoUrl(logoUrl != null ? logoUrl : "N/A")
                     .content(content)
                     .footer(footer)
+                    .contentHash(request.getContentHash())
                     .build();
 
             // ─── Emit SUCCESS Business Event ───

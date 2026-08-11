@@ -404,3 +404,121 @@ Body (form-data):
 ```
 
 Then go to Dynatrace and run Query 1 — you should see all your events! 🎉
+
+---
+
+## 🛠️ Advanced Pattern: Idempotency & Auto-Versioning
+
+We implemented an Enterprise Idempotency pattern in the Java code (specifically `FileIngestionService`) that interacts perfectly with our DQL queries above, requiring **ZERO** changes to the Dynatrace dashboard!
+
+Here is how the architecture handles retries:
+
+### 1. Exact Duplicates (Skipping Pipeline)
+If you upload the exact same file that already succeeded (matching `X-Correlation-Id` and `SHA-256` content hash), the Java application aborts instantly. 
+**Impact on Dynatrace:** None. Because S1 skips processing entirely, no new events are emitted. The dashboard remains clean and accurate without duplicate event clutter.
+
+### 2. Auto-Versioning (Changed File with Same ID)
+If you edit a file that previously succeeded, but upload it again with the exact same `X-Correlation-Id`, the Java code detects a hash mismatch. It automatically appends a timestamp to the ID (e.g. `fx-123` becomes `fx-123-v1724000000`).
+**Impact on Dynatrace:** Because the ID is changed before the business event is emitted, Dynatrace naturally treats this as a brand new pipeline run! 
+- The original run (`fx-123`) remains green in your dashboard history.
+- A brand new trace (`fx-123-v1724...`) appears on the DAG map progressing through `S1 -> S2 -> S3`.
+
+This combination of **Smart Java Logic** and **Max() DQL Queries** results in a robust, bulletproof observability pipeline.
+
+---
+
+## 🛠️ Advanced Visualizations (Table Grids & Heatmaps)
+
+To provide a perfect, color-coded tracking grid for your files, you can use the following queries to create Table Grids or Heatmaps (with 1 file per row and exact stages per column).
+
+### The Unified File Tracker (Color-Coded Table)
+Set visualization to **Table** and use Thresholds on columns (Green=SUCCESS, Red=FAILED, Grey=NOT_STARTED).
+
+```sql
+// Step 1: Fetch the most recent 10 files
+fetch bizevents
+| filter source == "file-ingestion-service" OR source == "file-transformation-service" OR source == "file-persistence-service"
+| fieldsAdd 
+    file_id = jsonField(data, "file_id"),
+    stage = jsonField(data, "stage")
+    
+// Step 2: Create exactly 3 columns per file!
+| summarize 
+    Step1_Ingestion = max(if(stage == "S1_INGESTION", status, else: "")),
+    Step2_Transform = max(if(stage == "S2_TRANSFORMATION", status, else: "")),
+    Step3_Storage = max(if(stage == "S3_DB_PERSISTENCE", status, else: "")),
+    latest_time = max(timestamp),
+    by: {file_id}
+| sort latest_time desc
+| limit 10
+
+// Step 3: Fill in the blanks for stages that haven't started yet
+| fieldsAdd 
+    Step1_Ingestion = if(Step1_Ingestion == "", "NOT_STARTED", else: Step1_Ingestion),
+    Step2_Transform = if(Step2_Transform == "", "NOT_STARTED", else: Step2_Transform),
+    Step3_Storage = if(Step3_Storage == "", "NOT_STARTED", else: Step3_Storage)
+    
+| fields file_id, Step1_Ingestion, Step2_Transform, Step3_Storage, latest_time
+```
+
+### The FX-Only Table
+If you want a dedicated table exclusively for FX files:
+
+```sql
+fetch bizevents
+| filter source == "file-ingestion-service" OR source == "file-transformation-service" OR source == "file-persistence-service"
+| fieldsAdd 
+    file_id = jsonField(data, "file_id"),
+    stage = jsonField(data, "stage")
+| summarize 
+    Step1_Ingestion = max(if(stage == "S1_INGESTION", status, else: "")),
+    Step2_Transform = max(if(stage == "S2_TRANSFORMATION", status, else: "")),
+    Step3_Storage = max(if(stage == "S3_DB_PERSISTENCE", status, else: "")),
+    latest_time = max(timestamp),
+    pipeline_type = max(file_type), 
+    by: {file_id}
+| filter pipeline_type == "FX"
+| sort latest_time desc
+| limit 10
+| fieldsAdd 
+    Step1_Ingestion = if(Step1_Ingestion == "", "NOT_STARTED", else: Step1_Ingestion),
+    Step2_Transform = if(Step2_Transform == "", "NOT_STARTED", else: Step2_Transform),
+    Step3_Storage = if(Step3_Storage == "", "NOT_STARTED", else: Step3_Storage)
+| fields file_id, Step1_Ingestion, Step2_Transform, Step3_Storage, latest_time
+```
+
+### Dedicated Heatmaps by File Type
+To create the perfect Y-axis (files) and X-axis (stages) grid using the **Heatmap** visualization, use these 3 queries for your 3 dedicated tiles.
+
+**1. The FX Pipeline Heatmap**
+```sql
+fetch bizevents
+| filter source == "file-ingestion-service" OR source == "file-transformation-service" OR source == "file-persistence-service"
+| fieldsAdd 
+    file_id = jsonField(data, "file_id"),
+    stage = jsonField(data, "stage")
+| summarize 
+    s1_status = max(if(stage == "S1_INGESTION", status, else: "")),
+    s2_status = max(if(stage == "S2_TRANSFORMATION", status, else: "")),
+    s3_status = max(if(stage == "S3_DB_PERSISTENCE", status, else: "")),
+    latest_time = max(timestamp),
+    pipeline_type = max(file_type),
+    by: {file_id}
+| filter pipeline_type == "FX"      // 👉 ONLY KEEP FX FILES
+| sort latest_time desc
+| limit 10
+| fieldsAdd dummy_stages = splitString("S1_INGESTION,S2_TRANSFORMATION,S3_DB_PERSISTENCE", ",")
+| expand stage = dummy_stages
+| fieldsAdd latest_status = if(stage == "S1_INGESTION", s1_status, else: if(stage == "S2_TRANSFORMATION", s2_status, else: s3_status))
+| fieldsAdd events = if(latest_status == "", 0, else: 1)
+| fieldsAdd latest_status = if(latest_status == "", "NOT_STARTED", else: latest_status)
+| fieldsAdd stage_name = concat(file_id, " | ", if(stage == "S1_INGESTION", "Ingestion", else: if(stage == "S2_TRANSFORMATION", "Transform", else: "Storage")))
+| sort latest_time desc, stage asc
+| fields file_id, stage, stage_name, latest_status, events
+```
+
+**2. The EDM Pipeline Heatmap**
+*(Same query as above, but change `| filter pipeline_type == "FX"` to `== "EDM"`)*
+
+**3. The ACCOUNTS Pipeline Heatmap**
+*(Same query as above, but change `| filter pipeline_type == "FX"` to `== "ACCOUNTS"`)*

@@ -21,4 +21,5 @@ public class IngestionPayload {
     private String fileExtension;   // e.g., "txt", "csv"
     private String fileType;        // FX, EDM, ACCOUNTS, or GENERIC
     private String fileContent;     // Raw text content of the file
+    private String contentHash;     // SHA-256 fingerprint
 }

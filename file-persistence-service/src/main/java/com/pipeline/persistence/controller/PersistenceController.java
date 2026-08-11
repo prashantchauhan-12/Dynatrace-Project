@@ -53,6 +53,16 @@ public class PersistenceController {
         ));
     }
 
+    @GetMapping("/status/{fileId}")
+    public ResponseEntity<Map<String, Object>> checkStatus(@PathVariable String fileId) {
+        return persistenceService.findByFileId(fileId)
+                .map(doc -> ResponseEntity.ok(Map.of(
+                        "exists", (Object)true,
+                        "contentHash", (Object)doc.getContentHash()
+                )))
+                .orElseGet(() -> ResponseEntity.ok(Map.of("exists", (Object)false)));
+    }
+
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("S3 Persistence Service is running ✅");

@@ -54,6 +54,9 @@ public class FileDocument {
     @Column(name = "status")
     private String status;              // "SUCCESS" or "FAILED"
 
+    @Column(name = "content_hash")
+    private String contentHash;         // SHA-256 fingerprint from S1
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
