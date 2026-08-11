@@ -1,46 +1,82 @@
-# File Pipeline Monitoring & Optimization Report
+# 🚀 Final Project Presentation: Dynatrace Enterprise Pipeline Observability
 
 ## 1. Executive Summary
-We have successfully designed and implemented a comprehensive, real-time observability dashboard in Dynatrace for the File Processing Pipeline (Ingestion -> Transformation -> Persistence). The dashboard provides instant, visual health tracking for all files entering the system, categorized by file type, with full drill-down capabilities for failure analysis.
+We successfully designed and implemented an enterprise-grade, highly observable, multi-stage file processing pipeline. By integrating **Dynatrace Business Events** directly into our Spring Boot microservices, we achieved real-time, end-to-end visibility of every single file flowing through the system. 
 
-## 2. Dashboard Accomplishments
-The new Dynatrace dashboard features the following capabilities, powered by advanced DQL (Dynatrace Query Language):
+Furthermore, we implemented advanced **Idempotency and Auto-Versioning** logic, ensuring zero wasted compute and a perfectly clean observability dashboard even when users upload duplicate or modified files.
 
-### A. Real-Time Pipeline DAGs
-We built visual Directed Acyclic Graphs (DAGs) that instantly show the exact stage of files. This includes a tile for tracking a specific file via a dropdown (`$file_id`), and an **Auto-Detect Latest File** tile that automatically hunts down the newest uploaded file without manual intervention.
+---
 
-![Pipeline DAGs](screenshots/dashboard_top.png)
+## 2. System Architecture (Low-Level Design)
+The architecture consists of three synchronous microservices (Ingestion, Transformation, Persistence) communicating via REST and relying on PostgreSQL for state. Each service emits a standardized `bizevent` to Dynatrace upon completion or failure.
 
-### B. Recent Files & Error Analysis
-We created an interactive "Recent Files" tracker. Clicking on any file instantly filters the entire dashboard. We also implemented a "Failures by Stage" log that pulls up critical parameters (including `error_type` and `error_detail`), enabling developers to instantly debug failures without searching through logs.
+![Low Level Design](./screenshots/low_level_design.jpeg)
 
-![Recent Files and Error Analysis](screenshots/dashboard_middle.png)
+```mermaid
+flowchart LR
+    %% External Node
+    DT((Dynatrace Event Hub))
 
-### C. Categorized Pipeline Heatmaps
-We designed multi-file Heatmap matrices that perfectly align 3 distinct pipeline stages (S1, S2, S3) per file. We created dedicated, filtered matrices for **FX**, **EDM**, and **ACCOUNTS** file types, allowing teams to monitor large volumes of concurrent files at a glance.
+    subgraph S1 [S1: File Ingestion Service]
+        C1[FileUploadController] --> V[Validation]
+        V --> IS[FileIngestionService]
+        IS -.-> E1[BusinessEventEmitter]
+    end
+    
+    subgraph S2 [S2: File Transformation Service]
+        C2[TransformationController] --> TS[FileTransformationService]
+        TS --> P[Text Parser/Regex]
+        TS -.-> E2[BusinessEventEmitter]
+    end
+    
+    subgraph S3 [S3: File Persistence Service]
+        C3[PersistenceController] --> PS[DatabasePersistenceService]
+        PS --> Repo[Spring Data JPA Repo]
+        PS -.-> E3[BusinessEventEmitter]
+    end
 
-![Pipeline Heatmaps (All & FX)](screenshots/dashboard_heatmaps_1.png)
+    %% Service to Service Communication
+    IS -->|RestTemplate HTTP POST| C2
+    TS -->|RestTemplate HTTP POST| C3
 
-![Pipeline Heatmaps (EDM & Accounts)](screenshots/dashboard_heatmaps_2.png)
+    %% Business Event Emission
+    E1 -.->|Business Event POST| DT
+    E2 -.->|Business Event POST| DT
+    E3 -.->|Business Event POST| DT
+```
 
-## 3. Exploration: Enterprise Retriggering & Idempotency
-As part of the final requirement, we explored how to handle file re-uploads (retries) gracefully without corrupting the pipeline's history. 
+---
 
-### The Current State
-Currently, the pipeline uses an `X-Correlation-Id` header. 
-- If omitted, a retry generates a new UUID, creating a brand new pipeline run in the dashboard.
-- If included, the retry uses the same `file_id`. Because our Dynatrace queries utilize a `max(status)` aggregation, a subsequent "SUCCESS" will automatically override a previous "FAILED" status in the visual DAG.
+## 3. The Idempotency & Auto-Versioning Engine
+To prevent duplicate files from polluting the Dynatrace dashboard and wasting compute cycles, we built a **Smart Idempotency Engine** powered by SHA-256 Content Hashing.
 
-### The "Smart Resume" Architecture (Recommended)
-To achieve a perfect enterprise-grade retry mechanism without requiring any changes to our Dynatrace dashboard, we recommend implementing **Idempotency (Smart Resumes)** in the Java Spring Boot layer.
+### How it works:
+1. **Fingerprinting:** S1 immediately generates a SHA-256 hash of the incoming file bytes.
+2. **Status Check:** S1 queries S3 to see if the file ID already exists in the database.
+3. **Exact Duplicates:** If the ID and Hash match perfectly, S1 aborts the pipeline instantly. **Result:** Zero wasted compute and the Dynatrace DAG remains perfectly clean (no duplicate events emitted).
+4. **Auto-Versioning (Modified Files):** If the ID matches but the Hash differs (the user edited the text document), S1 appends a timestamp to the ID (e.g., `fx-123` becomes `fx-123-v1724000000`). **Result:** Dynatrace treats this as a brand-new run, allowing the DAG to visualize the new attempt without overwriting the history of the original file!
 
-**How it works:**
-1. A failed file (e.g., failed at `S3_DB_PERSISTENCE`) is re-uploaded via Postman with its original `X-Correlation-Id`.
-2. The `FileIngestionService` queries the database and recognizes that `S1` and `S2` were already completed successfully yesterday.
-3. The Java application **skips** `S1` and `S2` to save compute resources, and forwards the file directly to `S3`.
-4. `S3` completes and emits a single new `SUCCESS` event to Dynatrace.
+---
 
-**Why this is perfect:**
-Because our Dynatrace queries use `max(status)`, Dynatrace will automatically combine the old `SUCCESS` events from S1 and S2 with the new `SUCCESS` event from S3. The dashboard Heatmap will instantly turn completely Green, visually representing a fully restored pipeline run. 
+## 4. The Dynatrace Enterprise Dashboard
 
-This requires **zero** changes to the Dynatrace DQL we just built, while saving massive amounts of compute time on large file retries.
+The crown jewel of this project is the comprehensive Dynatrace Dashboard, featuring advanced DQL visualizations that we built from scratch.
+
+### 4.1 Dashboard Overview & Pipeline DAG
+Using complex `summarize` queries with `priority` weighting, we built a multi-hop Honeycomb DAG that traces the path of any individual file.
+![Dashboard Top](./screenshots/dashboard_top.png)
+
+### 4.2 Live Error Feed & Aggregate Metrics
+We implemented a real-time error drill-down table, allowing operations teams to see exactly why a file failed at a specific stage (e.g., `DUPLICATE_FILE` constraint violations).
+![Dashboard Middle](./screenshots/dashboard_middle.png)
+
+### 4.3 Unified Table Tracker & Dedicated Heatmaps
+We segmented pipeline health by Business Vertical (FX, EDM, ACCOUNTS). We built a Unified Color-Coded Table Tracker (Green/Red/Grey) and segmented Heatmaps mapping exactly 1 File (Y-axis) to exactly 3 Stages (X-axis).
+![Dashboard Heatmaps 1](./screenshots/dashboard_heatmaps_1.png)
+![Dashboard Heatmaps 2](./screenshots/dashboard_heatmaps_2.png)
+*(Note: As documented, when running into visualization scaling issues on the honeycomb with multiple pipelines, you can reference `problem with honeycomb for file_pipeline for multiple.png` in the screenshots folder).*
+
+---
+
+## 5. Conclusion
+This pipeline serves as a golden standard for microservice observability. Through intelligent Java logic (Idempotency) and advanced DQL capabilities, we provided the operations and management teams with a bulletproof, highly visual monitoring solution.
