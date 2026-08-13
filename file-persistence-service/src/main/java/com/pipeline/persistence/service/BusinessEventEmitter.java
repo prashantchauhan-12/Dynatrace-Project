@@ -56,7 +56,7 @@ public class BusinessEventEmitter {
      * @param errorDetail Error description if failed, null if success
      * @param fileType    File type: FX, EDM, ACCOUNTS, or GENERIC
      */
-    public void emitPersistenceEvent(String fileId, String status, String errorDetail, String fileType) {
+    public void emitPersistenceEvent(String fileId, String status, String errorDetail, String fileType, long processingTimeMs) {
 
         Map<String, Object> event = new LinkedHashMap<>();
 
@@ -80,6 +80,7 @@ public class BusinessEventEmitter {
         data.put("file_size", 0);
         data.put("file_extension", "N/A");
         data.put("timestamp", Instant.now().toString());
+        data.put("processing_time_ms", processingTimeMs);
         event.put("data", data);
 
         sendToDynatrace(event);

@@ -60,6 +60,7 @@ public class FileTransformationService {
      * @param request Contains fileId and raw file content from S1
      */
     public void transformFile(TransformationRequest request) {
+        long startTime = System.currentTimeMillis();
 
         String fileId = request.getFileId();
         String fileType = request.getFileType() != null ? request.getFileType() : "GENERIC";
@@ -108,19 +109,19 @@ public class FileTransformationService {
                     .build();
 
             // ─── Emit SUCCESS Business Event ───
-            businessEventEmitter.emitTransformationEvent(fileId, "SUCCESS", null, fileType);
+            businessEventEmitter.emitTransformationEvent(fileId, "SUCCESS", null, fileType, System.currentTimeMillis() - startTime);
 
         } catch (TransformationException e) {
             log.error("[S2_ERROR] file_id={} | error={}", fileId, e.getMessage());
 
             // Emit FAILURE Business Event
-            businessEventEmitter.emitTransformationEvent(fileId, "FAILED", e.getMessage(), fileType);
+            businessEventEmitter.emitTransformationEvent(fileId, "FAILED", e.getMessage(), fileType, System.currentTimeMillis() - startTime);
             throw e;
 
         } catch (Exception e) {
             log.error("[S2_ERROR] file_id={} | unexpected_error={}", fileId, e.getMessage(), e);
 
-            businessEventEmitter.emitTransformationEvent(fileId, "FAILED", "UNEXPECTED: " + e.getMessage(), fileType);
+            businessEventEmitter.emitTransformationEvent(fileId, "FAILED", "UNEXPECTED: " + e.getMessage(), fileType, System.currentTimeMillis() - startTime);
             throw e;
         }
 

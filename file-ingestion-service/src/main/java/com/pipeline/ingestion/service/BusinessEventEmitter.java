@@ -68,7 +68,7 @@ public class BusinessEventEmitter {
      * @param fileType      File type: FX, EDM, ACCOUNTS, or GENERIC
      */
     public void emitIngestionEvent(String fileId, String status, String errorType,
-                                    long fileSize, String fileExtension, String fileType) {
+                                    long fileSize, String fileExtension, String fileType, long processingTimeMs) {
 
         // Build the CloudEvents-compliant event
         Map<String, Object> event = new LinkedHashMap<>();
@@ -93,6 +93,7 @@ public class BusinessEventEmitter {
         data.put("file_size", fileSize);
         data.put("file_extension", fileExtension);
         data.put("timestamp", Instant.now().toString());
+        data.put("processing_time_ms", processingTimeMs);
         event.put("data", data);
 
         // Send to Dynatrace

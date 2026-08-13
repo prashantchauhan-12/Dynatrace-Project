@@ -247,8 +247,9 @@ fetch bizevents
     stage_name = jsonField(data, "stage_name"),
     error_type = jsonField(data, "error_type"),
     error_detail = jsonField(data, "error_detail"),
-    file_size = jsonField(data, "file_size"),
-    file_extension = jsonField(data, "file_extension")
+    file_size = toString(jsonField(data, "file_size")),
+    file_extension = jsonField(data, "file_extension"),
+    processing_time_ms = toDouble(jsonField(data, "processing_time_ms"))
 | sort timestamp desc
 | summarize 
     latest_status = takeFirst(status), 
@@ -259,8 +260,10 @@ fetch bizevents
     error_detail = takeFirst(error_detail),
     file_size = takeFirst(file_size),
     file_extension = takeFirst(file_extension),
+    avg_processing_time_ms = avg(processing_time_ms),
     event_time = takeFirst(timestamp),
     by: {stage}
+| fieldsAdd avg_processing_time = if(isNotNull(avg_processing_time_ms), concat(toString(avg_processing_time_ms), "ms"), else: "")
 | sort stage asc
 ```
 
@@ -310,8 +313,9 @@ data
       stage = jsonField(data, "stage"),
       error_type = jsonField(data, "error_type"),
       error_detail = jsonField(data, "error_detail"),
-      file_size = jsonField(data, "file_size"),
-      file_extension = jsonField(data, "file_extension")
+      file_size = toString(jsonField(data, "file_size")),
+      file_extension = jsonField(data, "file_extension"),
+      processing_time_ms = if(isNotNull(jsonField(data, "processing_time_ms")), concat(toString(jsonField(data, "processing_time_ms")), "ms"), else: "")
       
   // 👉 This links perfectly to your dropdown!
   | filter in(file_id, $file_id)
@@ -332,6 +336,7 @@ data
     file_size = takeFirst(file_size),
     file_extension = takeFirst(file_extension),
     file_type = takeFirst(file_type),
+    processing_time_ms = takeFirst(processing_time_ms),
     event_time = takeFirst(timestamp),
     by: {stage}
     

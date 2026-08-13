@@ -27,3 +27,6 @@ target/
 .vscode/
 .env
 .env.properties
+
+# Next.js Custom Dashboard (Ignored per user request)
+monitoring-dashboard/

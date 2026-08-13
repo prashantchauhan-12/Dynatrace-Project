@@ -70,6 +70,7 @@ public class FileIngestionService {
      * @return The generated file_id
      */
     public String processFile(MultipartFile file, String correlationId, String fileType) throws IOException {
+        long startTime = System.currentTimeMillis();
 
         // Compute SHA-256 Hash
         String contentHash = computeHash(file.getBytes());
@@ -117,7 +118,7 @@ public class FileIngestionService {
 
             // Emit FAILURE event to Dynatrace
             businessEventEmitter.emitIngestionEvent(
-                    fileId, "FAILED", "INVALID_FILE_FORMAT", fileSize, extension, normalizedFileType);
+                    fileId, "FAILED", "INVALID_FILE_FORMAT", fileSize, extension, normalizedFileType, System.currentTimeMillis() - startTime);
 
             throw new InvalidFileFormatException(
                     "File format '." + extension + "' is not supported. Allowed formats: " + ALLOWED_EXTENSIONS);
@@ -130,7 +131,7 @@ public class FileIngestionService {
 
             // Emit FAILURE event to Dynatrace
             businessEventEmitter.emitIngestionEvent(
-                    fileId, "FAILED", "PAYLOAD_TOO_LARGE", fileSize, extension, normalizedFileType);
+                    fileId, "FAILED", "PAYLOAD_TOO_LARGE", fileSize, extension, normalizedFileType, System.currentTimeMillis() - startTime);
 
             throw new FileTooLargeException(
                     "File size (" + fileSize + " bytes) exceeds maximum allowed size (" + MAX_FILE_SIZE + " bytes)");
@@ -138,7 +139,7 @@ public class FileIngestionService {
 
         // Step 4: Emit SUCCESS event to Dynatrace
         businessEventEmitter.emitIngestionEvent(
-                fileId, "SUCCESS", null, fileSize, extension, normalizedFileType);
+                fileId, "SUCCESS", null, fileSize, extension, normalizedFileType, System.currentTimeMillis() - startTime);
 
         log.info("[S1_INGESTION] ✅ Validation passed | file_id={}", fileId);
 
