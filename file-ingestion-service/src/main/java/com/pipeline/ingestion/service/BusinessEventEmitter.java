@@ -67,8 +67,8 @@ public class BusinessEventEmitter {
      * @param fileExtension File extension (e.g., "txt", "pdf")
      * @param fileType      File type: FX, EDM, ACCOUNTS, or GENERIC
      */
-    public void emitIngestionEvent(String fileId, String status, String errorType,
-                                    long fileSize, String fileExtension, String fileType, long processingTimeMs) {
+    public void emitIngestionEvent(String fileId, String status, String errorType, String errorDetail,
+                                    long fileSize, String fileExtension, String fileType, long processingTimeMs, String fileName) {
 
         // Build the CloudEvents-compliant event
         Map<String, Object> event = new LinkedHashMap<>();
@@ -89,9 +89,10 @@ public class BusinessEventEmitter {
         data.put("stage", "S1_INGESTION");
         data.put("stage_name", "File Ingestion");
         data.put("error_type", errorType != null ? errorType : "NONE");
-        data.put("error_detail", errorType != null ? errorType : "NONE");
+        data.put("error_detail", errorDetail != null ? errorDetail : "NONE");
         data.put("file_size", fileSize);
         data.put("file_extension", fileExtension);
+        data.put("file_name", fileName);
         data.put("timestamp", Instant.now().toString());
         data.put("processing_time_ms", processingTimeMs);
         event.put("data", data);
