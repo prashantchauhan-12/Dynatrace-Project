@@ -1,0 +1,6 @@
+[TITLE]
+Error Report
+[LOGO]
+https://example.com/logo.png
+[CONTENT]
+This file is missing the footer section intentionally to trigger an S2 error.

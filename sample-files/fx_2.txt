@@ -1,0 +1,8 @@
+[TITLE]
+FX Report 2
+[LOGO]
+https://example.com/fx_logo.png
+[CONTENT]
+Foreign Exchange transaction details for Europe. Total volume: €800M.
+[FOOTER]
+Confidential FX Data

@@ -33,7 +33,7 @@ spring:
 # ---- Dynatrace Configuration ----
 dynatrace:
   tenant:
-    url: https://jpf24109.live.dynatrace.com
+    url: https://nfp85520.live.dynatrace.com
   api:
     token: ${DYNATRACE_API_TOKEN}
 

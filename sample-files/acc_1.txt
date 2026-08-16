@@ -1,0 +1,8 @@
+[TITLE]
+Accounts Payable 1
+[LOGO]
+https://example.com/acc_logo.png
+[CONTENT]
+Q3 supplier invoices and payment schedules.
+[FOOTER]
+Accounts Department

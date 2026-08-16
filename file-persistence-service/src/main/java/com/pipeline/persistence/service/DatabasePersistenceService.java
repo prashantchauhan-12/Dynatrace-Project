@@ -53,15 +53,20 @@ public class DatabasePersistenceService {
         String fileType = request.getFileType() != null ? request.getFileType() : "GENERIC";
         log.info("[S3_DB_PERSIST] ▶ Starting database save | file_id={} | file_type={}", fileId, fileType);
 
+        long saveStart = 0;
         try {
-            // Check for duplicate
+            // Check for duplicate (audited)
+            long dupStart = System.currentTimeMillis();
             if (repository.existsByFileId(fileId)) {
                 log.warn("[S3_WARNING] file_id={} already exists in database, skipping", fileId);
+                businessEventEmitter.emitMethodAuditEvent(fileId, "checkDuplicate", System.currentTimeMillis() - dupStart, "FAILED", "Duplicate file_id");
                 businessEventEmitter.emitPersistenceEvent(fileId, "FAILED", "DUPLICATE_FILE", fileType, System.currentTimeMillis() - startTime);
                 throw new RuntimeException("File with ID '" + fileId + "' already exists in database");
             }
+            businessEventEmitter.emitMethodAuditEvent(fileId, "checkDuplicate", System.currentTimeMillis() - dupStart, "SUCCESS", null);
 
-            // Build JPA entity from the request
+            // Build JPA entity from the request (audited)
+            long buildStart = System.currentTimeMillis();
             FileDocument document = FileDocument.builder()
                     .fileId(fileId)
                     .fileName(request.getFileName())
@@ -73,9 +78,12 @@ public class DatabasePersistenceService {
                     .contentHash(request.getContentHash())
                     .status("SUCCESS")
                     .build();
+            businessEventEmitter.emitMethodAuditEvent(fileId, "buildEntity", System.currentTimeMillis() - buildStart, "SUCCESS", null);
 
-            // Save to PostgreSQL
+            // Save to PostgreSQL (audited)
+            saveStart = System.currentTimeMillis();
             FileDocument saved = repository.save(document);
+            businessEventEmitter.emitMethodAuditEvent(fileId, "saveToDatabase", System.currentTimeMillis() - saveStart, "SUCCESS", null);
 
             log.info("[S3_DB_PERSIST] ✅ Saved to database | file_id={} | db_id={}",
                     fileId, saved.getId());
@@ -84,15 +92,11 @@ public class DatabasePersistenceService {
             businessEventEmitter.emitPersistenceEvent(fileId, "SUCCESS", null, fileType, System.currentTimeMillis() - startTime);
 
         } catch (DataAccessException e) {
-            // This catches:
-            // - java.sql.SQLException
-            // - Connection refused (DB down)
-            // - Connection timeout
-            // - Authentication failure
             log.error("[S3_ERROR] file_id={} | error_type=DB_CONNECTION | detail={}",
                     fileId, e.getMessage());
 
-            // Check if it's specifically an auth failure
+            businessEventEmitter.emitMethodAuditEvent(fileId, "saveToDatabase", System.currentTimeMillis() - saveStart, "FAILED", e.getMessage());
+
             String errorType = "DB_CONNECTION_ERROR";
             if (e.getMessage() != null &&
                 (e.getMessage().contains("authentication") ||

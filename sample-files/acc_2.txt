@@ -1,0 +1,8 @@
+[TITLE]
+Accounts Receivable 2
+[LOGO]
+https://example.com/acc_logo.png
+[CONTENT]
+Q3 customer billing statements.
+[FOOTER]
+Accounts Department

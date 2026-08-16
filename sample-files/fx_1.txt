@@ -1,0 +1,8 @@
+[TITLE]
+FX Report 1
+[LOGO]
+https://example.com/fx_logo.png
+[CONTENT]
+Foreign Exchange transaction details for Q3. Total volume: $1.2B.
+[FOOTER]
+Confidential FX Data

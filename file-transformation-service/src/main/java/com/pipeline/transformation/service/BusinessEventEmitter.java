@@ -50,27 +50,19 @@ public class BusinessEventEmitter {
 
     /**
      * Emit a Business Event for Stage 2 (Transformation).
-     *
-     * @param fileId      Correlation ID
-     * @param status      "SUCCESS" or "FAILED"
-     * @param errorDetail Error description if failed, null if success
-     * @param fileType    File type: FX, EDM, ACCOUNTS, or GENERIC
      */
     public void emitTransformationEvent(String fileId, String status, String errorDetail, String fileType, long processingTimeMs) {
 
         Map<String, Object> event = new LinkedHashMap<>();
 
-        // CloudEvents required fields
         event.put("specversion", "1.0");
         event.put("id", UUID.randomUUID().toString());
         event.put("source", "file-transformation-service");
         event.put("type", "com.pipeline.file.transformation");
 
-        // --- TOP-LEVEL SUMMARY (2 fields — visible on honeycomb tile) ---
         event.put("file_type", fileType != null ? fileType : "GENERIC");
         event.put("status", status);
 
-        // --- DETAIL DATA (8 fields — visible on click/drilldown) ---
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("file_id", fileId);
         data.put("stage", "S2_TRANSFORMATION");
@@ -86,6 +78,35 @@ public class BusinessEventEmitter {
         sendToDynatrace(event);
     }
 
+    /**
+     * Emit a Business Event for Method-Level Auditing.
+     * Tracks individual method execution time per file_id.
+     */
+    public void emitMethodAuditEvent(String fileId, String methodName, long processingTimeMs, String status, String errorDetail) {
+        Map<String, Object> event = new LinkedHashMap<>();
+
+        event.put("specversion", "1.0");
+        event.put("id", UUID.randomUUID().toString());
+        event.put("source", "file-transformation-service");
+        event.put("type", "com.pipeline.method.audit");
+
+        event.put("method_name", methodName);
+        event.put("status", status);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("file_id", fileId);
+        data.put("stage", "S2_TRANSFORMATION");
+        data.put("method_name", methodName);
+        data.put("processing_time_ms", processingTimeMs);
+        data.put("status", status);
+        data.put("error_detail", errorDetail != null ? errorDetail : "NONE");
+        data.put("timestamp", Instant.now().toString());
+
+        event.put("data", data);
+
+        sendToDynatrace(event);
+    }
+
     private void sendToDynatrace(Map<String, Object> event) {
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -96,8 +117,8 @@ public class BusinessEventEmitter {
             String url = dynatraceTenantUrl + BIZ_EVENTS_PATH;
 
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-            log.info("[BIZ_EVENT] ✅ S2 event sent to Dynatrace | status={} | file_type={} | pipeline_status={}",
-                    response.getStatusCode(), event.get("file_type"), event.get("status"));
+            log.info("[BIZ_EVENT] ✅ S2 event sent to Dynatrace | status={} | type={} | pipeline_status={}",
+                    response.getStatusCode(), event.get("type"), event.get("status"));
 
         } catch (Exception e) {
             log.warn("[BIZ_EVENT_ERROR] Failed to send S2 event to Dynatrace: {}", e.getMessage());

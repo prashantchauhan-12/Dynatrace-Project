@@ -72,8 +72,16 @@ public class FileIngestionService {
     public String processFile(MultipartFile file, String correlationId, String fileType) throws IOException {
         long startTime = System.currentTimeMillis();
 
-        // Compute SHA-256 Hash
-        String contentHash = computeHash(file.getBytes());
+        // Compute SHA-256 Hash (audited)
+        long hashStart = System.currentTimeMillis();
+        String contentHash;
+        try {
+            contentHash = computeHash(file.getBytes());
+            businessEventEmitter.emitMethodAuditEvent(correlationId != null ? correlationId : "pre-id", "computeHash", System.currentTimeMillis() - hashStart, "SUCCESS", null);
+        } catch (Exception e) {
+            businessEventEmitter.emitMethodAuditEvent(correlationId != null ? correlationId : "pre-id", "computeHash", System.currentTimeMillis() - hashStart, "FAILED", e.getMessage());
+            throw e;
+        }
 
         // Generate or version file_id
         String fileId = correlationId;
@@ -101,7 +109,11 @@ public class FileIngestionService {
 
         String fileName = file.getOriginalFilename();
         long fileSize = file.getSize();
+
+        // Extract extension (audited)
+        long extStart = System.currentTimeMillis();
         String extension = extractExtension(fileName);
+        businessEventEmitter.emitMethodAuditEvent(fileId, "extractExtension", System.currentTimeMillis() - extStart, "SUCCESS", null);
 
         // Normalize fileType to uppercase
         String normalizedFileType = (fileType != null && !fileType.isBlank())
@@ -111,10 +123,12 @@ public class FileIngestionService {
         log.info("[S1_INGESTION] ▶ Processing started | file_id={} | name={} | size={} bytes | ext={} | file_type={}",
                 fileId, fileName, fileSize, extension, normalizedFileType);
 
-        // Step 2: Validate file FORMAT
+        // Step 2: Validate file FORMAT (audited)
+        long vfStart = System.currentTimeMillis();
         if (!ALLOWED_EXTENSIONS.contains(extension.toLowerCase())) {
             log.error("[S1_ERROR] file_id={} | error_type=INVALID_FORMAT | extension={}",
                     fileId, extension);
+            businessEventEmitter.emitMethodAuditEvent(fileId, "validateFormat", System.currentTimeMillis() - vfStart, "FAILED", "Invalid extension: " + extension);
 
             // Emit FAILURE event to Dynatrace
             businessEventEmitter.emitIngestionEvent(
@@ -123,11 +137,14 @@ public class FileIngestionService {
             throw new InvalidFileFormatException(
                     "File format '." + extension + "' is not supported. Allowed formats: " + ALLOWED_EXTENSIONS);
         }
+        businessEventEmitter.emitMethodAuditEvent(fileId, "validateFormat", System.currentTimeMillis() - vfStart, "SUCCESS", null);
 
-        // Step 3: Validate file SIZE
+        // Step 3: Validate file SIZE (audited)
+        long vsStart = System.currentTimeMillis();
         if (fileSize > MAX_FILE_SIZE) {
             log.error("[S1_ERROR] file_id={} | error_type=FILE_TOO_LARGE | size={} | max={}",
                     fileId, fileSize, MAX_FILE_SIZE);
+            businessEventEmitter.emitMethodAuditEvent(fileId, "validateSize", System.currentTimeMillis() - vsStart, "FAILED", "File too large: " + fileSize);
 
             // Emit FAILURE event to Dynatrace
             businessEventEmitter.emitIngestionEvent(
@@ -136,6 +153,7 @@ public class FileIngestionService {
             throw new FileTooLargeException(
                     "File size (" + fileSize + " bytes) exceeds maximum allowed size (" + MAX_FILE_SIZE + " bytes)");
         }
+        businessEventEmitter.emitMethodAuditEvent(fileId, "validateSize", System.currentTimeMillis() - vsStart, "SUCCESS", null);
 
         // Step 4: Emit SUCCESS event to Dynatrace
         businessEventEmitter.emitIngestionEvent(
@@ -143,8 +161,15 @@ public class FileIngestionService {
 
         log.info("[S1_INGESTION] ✅ Validation passed | file_id={}", fileId);
 
-        // Step 5: Forward to Service 2 (Transformation)
-        forwardToTransformationService(fileId, file, fileName, fileSize, extension, normalizedFileType, contentHash);
+        // Step 5: Forward to Service 2 (Transformation) — audited
+        long fwdStart = System.currentTimeMillis();
+        try {
+            forwardToTransformationService(fileId, file, fileName, fileSize, extension, normalizedFileType, contentHash);
+            businessEventEmitter.emitMethodAuditEvent(fileId, "forwardToS2", System.currentTimeMillis() - fwdStart, "SUCCESS", null);
+        } catch (Exception e) {
+            businessEventEmitter.emitMethodAuditEvent(fileId, "forwardToS2", System.currentTimeMillis() - fwdStart, "FAILED", e.getMessage());
+            throw e;
+        }
 
         return fileId;
     }

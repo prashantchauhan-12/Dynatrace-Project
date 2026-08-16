@@ -102,6 +102,32 @@ public class BusinessEventEmitter {
     }
 
     /**
+     * Emit a Business Event for Method-Level Auditing in S1.
+     * Tracks individual method execution time per file_id.
+     */
+    public void emitMethodAuditEvent(String fileId, String methodName, long processingTimeMs, String status, String errorDetail) {
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("specversion", "1.0");
+        event.put("id", UUID.randomUUID().toString());
+        event.put("source", "file-ingestion-service");
+        event.put("type", "com.pipeline.method.audit");
+        event.put("method_name", methodName);
+        event.put("status", status);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("file_id", fileId);
+        data.put("stage", "S1_INGESTION");
+        data.put("method_name", methodName);
+        data.put("processing_time_ms", processingTimeMs);
+        data.put("status", status);
+        data.put("error_detail", errorDetail != null ? errorDetail : "NONE");
+        data.put("timestamp", Instant.now().toString());
+        event.put("data", data);
+
+        sendToDynatrace(event);
+    }
+
+    /**
      * POST the event to Dynatrace Business Events Ingest API.
      *
      * IMPORTANT: We catch all exceptions here so that Dynatrace
@@ -119,8 +145,8 @@ public class BusinessEventEmitter {
 
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
-            log.info("[BIZ_EVENT] ✅ S1 event sent to Dynatrace | status={} | file_type={} | pipeline_status={}",
-                    response.getStatusCode(), event.get("file_type"), event.get("status"));
+            log.info("[BIZ_EVENT] ✅ S1 event sent to Dynatrace | status={} | type={} | pipeline_status={}",
+                    response.getStatusCode(), event.get("type"), event.get("status"));
 
         } catch (Exception e) {
             // Log the error but DON'T throw — pipeline must continue even if Dynatrace is down

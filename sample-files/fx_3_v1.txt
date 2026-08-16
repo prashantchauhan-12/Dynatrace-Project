@@ -1,0 +1,8 @@
+[TITLE]
+FX Report 3 (Revision 1)
+[LOGO]
+https://example.com/fx_logo.png
+[CONTENT]
+Foreign Exchange daily summary for APAC. Volume increased by 5%.
+[FOOTER]
+Confidential FX Data

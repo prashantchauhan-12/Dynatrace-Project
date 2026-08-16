@@ -20,7 +20,7 @@ spring:
 # Replace these with your actual Dynatrace tenant details
 dynatrace:
   tenant:
-    url: https://jpf24109.live.dynatrace.com
+    url: https://nfp85520.live.dynatrace.com
   api:
     token: ${DYNATRACE_API_TOKEN}
 

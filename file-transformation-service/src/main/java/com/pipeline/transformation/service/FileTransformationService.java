@@ -71,32 +71,39 @@ public class FileTransformationService {
         try {
             String rawContent = request.getFileContent();
 
-            // ─── Parse each section from the raw text ───
-            String title = extractSection(rawContent, "TITLE", fileId);
-            String logoUrl = extractSection(rawContent, "LOGO", fileId);
-            String content = extractSection(rawContent, "CONTENT", fileId);
-            String footer = extractSection(rawContent, "FOOTER", fileId);
+            // ─── Parse each section from the raw text (with method-level auditing) ───
+            String title = auditedExtractSection(rawContent, "TITLE", fileId);
+            String logoUrl = auditedExtractSection(rawContent, "LOGO", fileId);
+            String content = auditedExtractSection(rawContent, "CONTENT", fileId);
+            String footer = auditedExtractSection(rawContent, "FOOTER", fileId);
 
-            // ─── Validate required sections ───
-            if (title == null || title.isBlank()) {
-                throw new TransformationException(
-                        "missing_section=\"Title\" file_id=\"" + fileId + "\"");
-            }
-            if (content == null || content.isBlank()) {
-                throw new TransformationException(
-                        "missing_section=\"Content\" file_id=\"" + fileId + "\"");
-            }
-            if (footer == null || footer.isBlank()) {
-                // This is the exact log pattern Dynatrace should capture
-                log.error("[TRANSFORMATION_ERROR] missing_section=\"Footer\" file_id=\"{}\"", fileId);
-                throw new TransformationException(
-                        "missing_section=\"Footer\" file_id=\"" + fileId + "\"");
+            // ─── Validate required sections (audited) ───
+            long validateStart = System.currentTimeMillis();
+            try {
+                if (title == null || title.isBlank()) {
+                    throw new TransformationException(
+                            "missing_section=\"Title\" file_id=\"" + fileId + "\"");
+                }
+                if (content == null || content.isBlank()) {
+                    throw new TransformationException(
+                            "missing_section=\"Content\" file_id=\"" + fileId + "\"");
+                }
+                if (footer == null || footer.isBlank()) {
+                    log.error("[TRANSFORMATION_ERROR] missing_section=\"Footer\" file_id=\"{}\"", fileId);
+                    throw new TransformationException(
+                            "missing_section=\"Footer\" file_id=\"" + fileId + "\"");
+                }
+                businessEventEmitter.emitMethodAuditEvent(fileId, "validateSections", System.currentTimeMillis() - validateStart, "SUCCESS", null);
+            } catch (TransformationException e) {
+                businessEventEmitter.emitMethodAuditEvent(fileId, "validateSections", System.currentTimeMillis() - validateStart, "FAILED", e.getMessage());
+                throw e;
             }
 
             log.info("[S2_TRANSFORMATION] ✅ All sections parsed | file_id={} | title='{}'",
                     fileId, title.substring(0, Math.min(title.length(), 50)));
 
-            // ─── Build transformed document ───
+            // ─── Build transformed document (audited) ───
+            long buildStart = System.currentTimeMillis();
             document = TransformedDocument.builder()
                     .fileId(fileId)
                     .fileName(request.getFileName())
@@ -107,6 +114,7 @@ public class FileTransformationService {
                     .footer(footer)
                     .contentHash(request.getContentHash())
                     .build();
+            businessEventEmitter.emitMethodAuditEvent(fileId, "buildDocument", System.currentTimeMillis() - buildStart, "SUCCESS", null);
 
             // ─── Emit SUCCESS Business Event ───
             businessEventEmitter.emitTransformationEvent(fileId, "SUCCESS", null, fileType, System.currentTimeMillis() - startTime);
@@ -125,10 +133,29 @@ public class FileTransformationService {
             throw e;
         }
 
-        // ─── Forward to Service 3 (Persistence) ───
+        // ─── Forward to Service 3 (Persistence) — audited ───
         // We do this OUTSIDE the try-catch so that if S3 fails, S2 doesn't incorrectly
         // send a "FAILED" transformation event.
-        forwardToPersistenceService(fileId, document);
+        auditedForwardToPersistenceService(fileId, document);
+    }
+
+    /**
+     * Wraps extractSection with method-level auditing.
+     * Emits a business event per section extraction with timing and status.
+     */
+    private String auditedExtractSection(String rawContent, String sectionName, String fileId) {
+        long methodStart = System.currentTimeMillis();
+        String methodName = "extractSection_" + sectionName;
+        try {
+            String result = extractSection(rawContent, sectionName, fileId);
+            long elapsed = System.currentTimeMillis() - methodStart;
+            businessEventEmitter.emitMethodAuditEvent(fileId, methodName, elapsed, "SUCCESS", null);
+            return result;
+        } catch (Exception e) {
+            long elapsed = System.currentTimeMillis() - methodStart;
+            businessEventEmitter.emitMethodAuditEvent(fileId, methodName, elapsed, "FAILED", e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -170,6 +197,22 @@ public class FileTransformationService {
                 sectionName, extracted.substring(0, Math.min(extracted.length(), 30)), fileId);
 
         return extracted;
+    }
+
+    /**
+     * Wraps forwardToPersistenceService with method-level auditing.
+     */
+    private void auditedForwardToPersistenceService(String fileId, TransformedDocument document) {
+        long methodStart = System.currentTimeMillis();
+        try {
+            forwardToPersistenceService(fileId, document);
+            long elapsed = System.currentTimeMillis() - methodStart;
+            businessEventEmitter.emitMethodAuditEvent(fileId, "forwardToS3", elapsed, "SUCCESS", null);
+        } catch (Exception e) {
+            long elapsed = System.currentTimeMillis() - methodStart;
+            businessEventEmitter.emitMethodAuditEvent(fileId, "forwardToS3", elapsed, "FAILED", e.getMessage());
+            throw e;
+        }
     }
 
     /**

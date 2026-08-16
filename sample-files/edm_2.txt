@@ -1,0 +1,8 @@
+[TITLE]
+EDM Export 2
+[LOGO]
+https://example.com/edm_logo.png
+[CONTENT]
+Enterprise Data Management daily synchronization file.
+[FOOTER]
+EDM System Generated

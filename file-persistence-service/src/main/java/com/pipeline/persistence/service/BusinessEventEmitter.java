@@ -86,6 +86,31 @@ public class BusinessEventEmitter {
         sendToDynatrace(event);
     }
 
+    /**
+     * Emit a Business Event for Method-Level Auditing in S3.
+     */
+    public void emitMethodAuditEvent(String fileId, String methodName, long processingTimeMs, String status, String errorDetail) {
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("specversion", "1.0");
+        event.put("id", UUID.randomUUID().toString());
+        event.put("source", "file-persistence-service");
+        event.put("type", "com.pipeline.method.audit");
+        event.put("method_name", methodName);
+        event.put("status", status);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("file_id", fileId);
+        data.put("stage", "S3_DB_PERSISTENCE");
+        data.put("method_name", methodName);
+        data.put("processing_time_ms", processingTimeMs);
+        data.put("status", status);
+        data.put("error_detail", errorDetail != null ? errorDetail : "NONE");
+        data.put("timestamp", Instant.now().toString());
+        event.put("data", data);
+
+        sendToDynatrace(event);
+    }
+
     private void sendToDynatrace(Map<String, Object> event) {
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -96,8 +121,8 @@ public class BusinessEventEmitter {
             String url = dynatraceTenantUrl + BIZ_EVENTS_PATH;
 
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-            log.info("[BIZ_EVENT] ✅ S3 event sent to Dynatrace | status={} | file_type={} | pipeline_status={}",
-                    response.getStatusCode(), event.get("file_type"), event.get("status"));
+            log.info("[BIZ_EVENT] ✅ S3 event sent to Dynatrace | status={} | type={} | pipeline_status={}",
+                    response.getStatusCode(), event.get("type"), event.get("status"));
 
         } catch (Exception e) {
             log.warn("[BIZ_EVENT_ERROR] Failed to send S3 event to Dynatrace: {}", e.getMessage());

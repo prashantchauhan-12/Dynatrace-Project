@@ -1,0 +1,6 @@
+[LOGO]
+https://example.com/logo.png
+[CONTENT]
+This file is missing the title section intentionally to trigger an S2 error.
+[FOOTER]
+End of document

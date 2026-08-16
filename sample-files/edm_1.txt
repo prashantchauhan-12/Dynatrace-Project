@@ -1,0 +1,8 @@
+[TITLE]
+EDM Export 1
+[LOGO]
+https://example.com/edm_logo.png
+[CONTENT]
+Enterprise Data Management delta file for client onboarding.
+[FOOTER]
+EDM System Generated

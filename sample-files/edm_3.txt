@@ -1,0 +1,8 @@
+[TITLE]
+EDM Export 3
+[LOGO]
+https://example.com/edm_logo.png
+[CONTENT]
+Enterprise Data Management full backup metadata.
+[FOOTER]
+EDM System Generated

@@ -1,0 +1,8 @@
+[TITLE]
+FX Report 3 (Revision 3)
+[LOGO]
+https://example.com/fx_logo.png
+[CONTENT]
+Foreign Exchange daily summary for APAC. Final confirmed volume at EOD.
+[FOOTER]
+Confidential FX Data

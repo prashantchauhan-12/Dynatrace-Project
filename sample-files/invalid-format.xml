@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<document>
-    <title>Invalid Format Test</title>
-    <content>This file should be rejected by the Ingestion Service (S1) because XML is not in the allowed extensions list.</content>
-</document>
