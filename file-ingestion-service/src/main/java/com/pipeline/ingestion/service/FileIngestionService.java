@@ -209,8 +209,17 @@ public class FileIngestionService {
         try {
             restTemplate.postForEntity(transformationServiceUrl, request, String.class);
             log.info("[S1_INGESTION] ✅ Successfully forwarded to S2 | file_id={}", fileId);
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // S2 was reached but rejected the file (4xx — business validation error)
+            log.error("[S1_ERROR] S2 rejected file | file_id={} | httpStatus={} | response={}", fileId, e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("S2 Transformation rejected file: " + e.getResponseBodyAsString(), e);
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            // S2 was reached but encountered an internal error (5xx)
+            log.error("[S1_ERROR] S2 internal error | file_id={} | httpStatus={} | response={}", fileId, e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("S2 Transformation internal error: " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
-            log.error("[S1_ERROR] Failed to forward to S2 | file_id={} | error={}", fileId, e.getMessage());
+            // S2 was genuinely unreachable (connection refused, timeout, DNS failure)
+            log.error("[S1_ERROR] Failed to reach S2 | file_id={} | error={}", fileId, e.getMessage());
             throw new RuntimeException("Failed to reach Transformation Service: " + e.getMessage(), e);
         }
     }

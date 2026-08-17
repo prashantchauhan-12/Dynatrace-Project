@@ -1,0 +1,8 @@
+[TITLE]
+S3 Error Test File
+[LOGO]
+https://example.com/logo.png
+[CONTENT]
+This file will be used to trigger an S3 DUPLICATE_FILE error.
+[FOOTER]
+End of document
