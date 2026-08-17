@@ -117,7 +117,7 @@ OneAgent automatically intercepts JDBC drivers (like Spring Data JPA/Hibernate).
 *   **Global Database View:** To find the slowest queries across your entire application, navigate to **Database queries** in the left-hand menu of Dynatrace. It aggregates all SQL executions and automatically highlights slow or failing queries.
 
 
-![alt text](image-1.png)
-![alt text](image-2.png)
-![alt text](image-3.png)
-![alt text](image-4.png)
+![alt text](assets/image-1.png)
+![alt text](assets/image-2.png)
+![alt text](assets/image-3.png)
+![alt text](assets/image-4.png)
