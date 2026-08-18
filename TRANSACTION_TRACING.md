@@ -66,9 +66,6 @@ OneAgent is hardcoded to a specific Dynatrace Tenant (account) at the time of in
 2. Log into the NEW Dynatrace account.
 3. Go to **Deploy Dynatrace -> Start Installation -> Windows**.
 4. Click **Generate Token**, download the `.exe`, and run the installer.
-
-![OneAgent Download](assets/media__1786982838560.png)
-
 5. **Restart your Spring Boot applications** (S1, S2, S3). OneAgent only hooks into Java processes when they boot up.
 
 **Option 2: Reconfigure via Command Line**
